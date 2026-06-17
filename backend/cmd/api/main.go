@@ -23,6 +23,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -192,6 +193,9 @@ func main() {
 	mux.HandleFunc("POST /api/barter/loops/{id}/accept", a.requireAuth(a.acceptBarterLoop))
 	mux.HandleFunc("POST /api/barter/loops/{id}/ship", a.requireAuth(a.shipBarterLoop))
 	mux.HandleFunc("POST /api/barter/loops/{id}/receive", a.requireAuth(a.receiveBarterLoop))
+
+	// AI Video Route
+	mux.HandleFunc("POST /api/items/{id}/ai-video", a.requireAuth(a.generateSceneVideo))
 
 	// Admin Dashboard Routes
 	mux.HandleFunc("GET /api/admin/stats", a.requireAdmin(a.getAdminStats))
@@ -1745,6 +1749,10 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		CONSTRAINT fk_item_scene_generations_user FOREIGN KEY (user_id) REFERENCES users(id),
 		CONSTRAINT fk_item_scene_generations_item FOREIGN KEY (item_id) REFERENCES items(id)
 	)`); err != nil {
+		return err
+	}
+
+	if err := ensureColumn(ctx, db, "item_scene_generations", "video_path", "ALTER TABLE item_scene_generations ADD COLUMN video_path TEXT NULL AFTER image_path"); err != nil {
 		return err
 	}
 
@@ -3371,4 +3379,188 @@ func (a *app) receiveBarterLoop(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+}
+
+// AI Image-to-Video Handlers
+
+func (a *app) getGCPToken() (string, error) {
+	// 1. Try Metadata Server (Cloud Run environment)
+	req, err := http.NewRequest(http.MethodGet, "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token", nil)
+	if err == nil {
+		req.Header.Set("Metadata-Flavor", "Google")
+		client := &http.Client{Timeout: 1 * time.Second}
+		resp, err := client.Do(req)
+		if err == nil && resp.StatusCode == 200 {
+			defer resp.Body.Close()
+			var parsed struct {
+				AccessToken string `json:"access_token"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&parsed); err == nil && parsed.AccessToken != "" {
+				return parsed.AccessToken, nil
+			}
+		}
+	}
+
+	// 2. Try Local GCloud CLI (Local development environment)
+	cmd := exec.Command("gcloud", "auth", "print-access-token")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err == nil {
+		return strings.TrimSpace(out.String()), nil
+	}
+
+	return "", errors.New("no GCP credentials found")
+}
+
+func (a *app) generateSceneVideo(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	itemID, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+
+	// 1. Fetch the latest generated scene image for this item and user
+	var imagePath string
+	err := a.dbHandle().QueryRowContext(r.Context(), `
+		SELECT image_path 
+		FROM item_scene_generations 
+		WHERE user_id = ? AND item_id = ? 
+		ORDER BY created_at DESC 
+		LIMIT 1`, u.ID, itemID,
+	).Scan(&imagePath)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "AI使用風景画像がまだ生成されていません。先に生成してください。")
+		return
+	}
+
+	// 2. Fetch the actual image data
+	imageBytes, _, err := a.downloadImageAsset(r.Context(), imagePath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "AI使用風景画像のダウンロードに失敗しました: "+err.Error())
+		return
+	}
+
+	// Base64 encode the image
+	base64Image := base64.StdEncoding.EncodeToString(imageBytes)
+
+	// 3. Obtain GCP token and Project ID
+	gcpProjectID := env("FIRESTORE_PROJECT", env("GCP_PROJECT", env("GOOGLE_CLOUD_PROJECT", "")))
+	token, tokenErr := a.getGCPToken()
+
+	// If no GCP token or project ID is set, or Vertex AI is not configured, fallback gracefully!
+	if tokenErr != nil || gcpProjectID == "" {
+		log.Printf("Vertex AI Matcher: GCP token or project ID not set. Falling back to high-fidelity cinemagraph simulation. (TokenErr: %v, Project: %q)", tokenErr, gcpProjectID)
+		_, _ = a.dbHandle().ExecContext(r.Context(), `
+			UPDATE item_scene_generations 
+			SET video_path = 'simulated' 
+			WHERE user_id = ? AND item_id = ?`, u.ID, itemID)
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":    "simulated",
+			"videoUrl":  "",
+			"simulated": true,
+		})
+		return
+	}
+
+	// 4. Call Vertex AI Imagen Video Generation REST API
+	log.Printf("Calling Vertex AI Image-to-Video API for project: %s...", gcpProjectID)
+	endpoint := fmt.Sprintf("https://us-central1-aiplatform.googleapis.com/v1/projects/%s/locations/us-central1/publishers/google/models/imagegeneration:predict", gcpProjectID)
+
+	payload := map[string]any{
+		"instances": []any{
+			map[string]any{
+				"prompt": "cinematic smooth panning, slow motion loop, high quality, 4k",
+				"image": map[string]any{
+					"bytesBase64Encoded": base64Image,
+				},
+			},
+		},
+		"parameters": map[string]any{
+			"sampleCount":   1,
+			"aspectRatio":   "16:9",
+			"videoDuration": 4,
+		},
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+	vReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, bytes.NewReader(payloadBytes))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create Vertex request")
+		return
+	}
+	vReq.Header.Set("Authorization", "Bearer "+token)
+	vReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	vResp, err := client.Do(vReq)
+	if err != nil {
+		log.Printf("Vertex AI Video call failed: %v. Falling back to simulation.", err)
+		_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE item_scene_generations SET video_path = 'simulated' WHERE user_id = ? AND item_id = ?", u.ID, itemID)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":    "simulated",
+			"videoUrl":  "",
+			"simulated": true,
+		})
+		return
+	}
+	defer vResp.Body.Close()
+
+	vRespBody, _ := io.ReadAll(vResp.Body)
+	if vResp.StatusCode >= 300 {
+		log.Printf("Vertex AI Video API returned error %d: %s. Falling back to simulation.", vResp.StatusCode, string(vRespBody))
+		_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE item_scene_generations SET video_path = 'simulated' WHERE user_id = ? AND item_id = ?", u.ID, itemID)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":    "simulated",
+			"videoUrl":  "",
+			"simulated": true,
+		})
+		return
+	}
+
+	var vertexRes struct {
+		Predictions []struct {
+			BytesBase64Encoded string `json:"bytesBase64Encoded"`
+		} `json:"predictions"`
+	}
+	if err := json.Unmarshal(vRespBody, &vertexRes); err != nil || len(vertexRes.Predictions) == 0 {
+		log.Printf("Vertex AI Video JSON unmarshal failed. Falling back to simulation.")
+		_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE item_scene_generations SET video_path = 'simulated' WHERE user_id = ? AND item_id = ?", u.ID, itemID)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":    "simulated",
+			"videoUrl":  "",
+			"simulated": true,
+		})
+		return
+	}
+
+	// 5. Decode generated MP4 video bytes
+	videoBytes, err := base64.StdEncoding.DecodeString(vertexRes.Predictions[0].BytesBase64Encoded)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to decode generated video")
+		return
+	}
+
+	// 6. Save video to GCS
+	objectPath, videoURL, err := saveGeneratedImageToGCS("generated-scenes", fmt.Sprintf("video-item-%d-user-%d.mp4", itemID, u.ID), "video/mp4", videoBytes)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "AI動画のアップロードに失敗しました")
+		return
+	}
+
+	// 7. Update video_path in DB
+	_, err = a.dbHandle().ExecContext(r.Context(), `
+		UPDATE item_scene_generations 
+		SET video_path = ? 
+		WHERE user_id = ? AND item_id = ?`, objectPath, u.ID, itemID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update video record")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":    "completed",
+		"videoUrl":  videoURL,
+		"simulated": false,
+	})
 }

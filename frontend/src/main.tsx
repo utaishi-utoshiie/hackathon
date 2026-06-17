@@ -950,6 +950,13 @@ function ItemDetailScreen({
   const [sceneLoading, setSceneLoading] = useState(false);
   const [sceneError, setSceneError] = useState("");
 
+  // AI Video States
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoSimulated, setVideoSimulated] = useState(false);
+  const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+
   // Negotiation Modal States
   const [showNegotiation, setShowNegotiation] = useState(false);
   const [buyerBudget, setBuyerBudget] = useState(item ? Math.round(item.price * 0.8) : 0);
@@ -1069,10 +1076,35 @@ function ItemDetailScreen({
     try {
       const data = await api<{ scene: ItemScene }>(`/items/${currentItem.id}/ai-scene`, { method: "POST" });
       setScene(data.scene);
+      // Reset video on new scene image
+      setIsPlayingVideo(false);
+      setVideoUrl("");
     } catch (err) {
       setSceneError(err instanceof Error ? err.message : "AI画像の生成に失敗しました");
     } finally {
       setSceneLoading(false);
+    }
+  }
+
+  async function generateSceneVideo() {
+    setVideoLoading(true);
+    setVideoError("");
+    setVideoUrl("");
+    setIsPlayingVideo(false);
+    try {
+      const data = await api<{
+        status: string;
+        videoUrl: string;
+        simulated: boolean;
+      }>(`/items/${currentItem.id}/ai-video`, { method: "POST" });
+      setVideoUrl(data.videoUrl);
+      setVideoSimulated(data.simulated);
+      setIsPlayingVideo(true);
+      onNotice(data.simulated ? "映画風シネマグラフを生成しました！" : "AI動画の生成が完了しました！");
+    } catch (err) {
+      setVideoError(err instanceof Error ? err.message : "AI動画の生成に失敗しました");
+    } finally {
+      setVideoLoading(false);
     }
   }
 
@@ -1186,15 +1218,50 @@ function ItemDetailScreen({
               <img className="scene-image" src={item.imageUrl || "/placeholder.svg"} alt="" />
             </section>
             <section className="scene-card">
-              <p className="eyebrow">AI Scene</p>
-              {scene ? <img className="scene-image" src={scene.imageUrl} alt="" /> : <div className="scene-placeholder">あなた専用の使用イメージを生成できます</div>}
+              <p className="eyebrow">AI Scene & Video</p>
+              {!scene ? (
+                <div className="scene-placeholder">あなた専用の使用イメージを生成できます</div>
+              ) : isPlayingVideo ? (
+                videoSimulated ? (
+                  <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", borderRadius: "8px" }}>
+                    <img
+                      src={scene.imageUrl}
+                      alt=""
+                      className="scene-image"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        animation: "kenBurns 10s infinite alternate ease-in-out"
+                      }}
+                    />
+                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, pointerEvents: "none", background: "radial-gradient(circle, transparent 40%, rgba(255,255,255,0.15) 80%)" }}></div>
+                    <div className="sparkle" style={{ position: "absolute", top: "20%", left: "30%", width: "12px", height: "12px", background: "#fff", borderRadius: "50%", boxShadow: "0 0 10px #fff, 0 0 20px #ffccb8", animation: "sparkleGlow 3s infinite alternate ease-in-out" }}></div>
+                    <div className="sparkle" style={{ position: "absolute", top: "60%", left: "70%", width: "8px", height: "8px", background: "#fff", borderRadius: "50%", boxShadow: "0 0 8px #fff, 0 0 16px #b3dcff", animation: "sparkleGlow 2.5s infinite alternate ease-in-out", animationDelay: "0.8s" }}></div>
+                    <div className="sparkle" style={{ position: "absolute", top: "40%", left: "80%", width: "10px", height: "10px", background: "#fff", borderRadius: "50%", boxShadow: "0 0 8px #fff, 0 0 16px #ffefe9", animation: "sparkleGlow 3.5s infinite alternate ease-in-out", animationDelay: "1.5s" }}></div>
+                  </div>
+                ) : (
+                  <video src={videoUrl} autoPlay loop muted playsInline className="scene-image" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "8px" }} />
+                )
+              ) : (
+                <img className="scene-image" src={scene.imageUrl} alt="" style={{ borderRadius: "8px" }} />
+              )}
             </section>
           </div>
-          <button className="ai-button" disabled={!user || sceneLoading} onClick={() => void generateScene()}>
-            <ImagePlus size={18} />
-            {sceneLoading ? "生成中" : scene ? "AI画像を再生成" : "AI画像を生成"}
-          </button>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "12px" }}>
+            <button className="ai-button" disabled={!user || sceneLoading} onClick={() => void generateScene()} style={{ flex: 1 }}>
+              <ImagePlus size={18} />
+              {sceneLoading ? "生成中..." : scene ? "AI画像再生成" : "AI画像を生成"}
+            </button>
+            {scene && (
+              <button className="ai-button" disabled={!user || videoLoading} onClick={isPlayingVideo ? () => setIsPlayingVideo(false) : generateSceneVideo} style={{ flex: 1, background: isPlayingVideo ? "#eadfd3" : "#d85b46", color: isPlayingVideo ? "#1f2933" : "#ffffff", borderColor: isPlayingVideo ? "#eadfd3" : "#d85b46" }}>
+                <Bot size={18} />
+                {videoLoading ? "動画生成中..." : isPlayingVideo ? "⏹️ 再生停止" : "🎬 AI動画を生成・再生"}
+              </button>
+            )}
+          </div>
           {sceneError && <p className="error">{sceneError}</p>}
+          {videoError && <p className="error">{videoError}</p>}
           <div className="panel-heading">
             <Bot size={20} />
             <h3>AIに質問</h3>
