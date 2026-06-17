@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Bot,
@@ -894,6 +894,20 @@ function ItemDetailScreen({
   const [dialogueIndex, setDialogueIndex] = useState(0);
   const [negError, setNegError] = useState("");
 
+  const timerRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showNegotiation) {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+  }, [showNegotiation]);
+
   if (!item) {
     return (
       <section className="page-shell">
@@ -1010,12 +1024,13 @@ function ItemDetailScreen({
       setNegotiationResult(data);
       // Start sequential reveal
       let index = 0;
-      const interval = setInterval(() => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
         index++;
         if (index <= data.dialogue.length) {
           setDialogueIndex(index);
         } else {
-          clearInterval(interval);
+          if (timerRef.current) clearInterval(timerRef.current);
           setNegotiating(false);
           if (data.status === "completed") {
             onNotice("AI価格交渉が成立し、自動購入されました！");

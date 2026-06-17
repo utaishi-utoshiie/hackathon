@@ -2731,7 +2731,7 @@ func formatHistory(history []map[string]any) string {
 	}
 	var lines []string
 	for i, m := range history {
-		lines = append(lines, fmt.Sprintf("%d. %s: 「%s」（提示価格：%d円、アクション：%s）", i+1, m["speaker"], m["text"], m["price"], m["action"]))
+		lines = append(lines, fmt.Sprintf("%d. %s: 「%s」（提示価格：%v円、アクション：%s）", i+1, m["speaker"], m["text"], m["price"], m["action"]))
 	}
 	return strings.Join(lines, "\n")
 }
