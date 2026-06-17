@@ -19,6 +19,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/joho/godotenv"
 )
 
 type app struct {
@@ -70,6 +71,7 @@ type message struct {
 type authUserKey struct{}
 
 func main() {
+	_ = godotenv.Load()
 	dsn := os.Getenv("DATABASE_DSN")
 	if dsn == "" {
 		log.Fatal("DATABASE_DSN is required")

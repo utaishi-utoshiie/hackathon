@@ -520,15 +520,22 @@ function CreateItemScreen({
   const [price, setPrice] = useState(4800);
   const [imageUrl, setImageUrl] = useState("https://images.unsplash.com/photo-1594223274512-ad4803739b7c?auto=format&fit=crop&w=900&q=80");
   const [loadingAI, setLoadingAI] = useState(false);
+  const [aiError, setAIError] = useState("");
 
   async function generateDescription() {
     setLoadingAI(true);
+    setAIError("");
     try {
       const data = await api<{ description: string }>("/ai/generate-description", {
         method: "POST",
         body: JSON.stringify({ title, category, condition, notes })
       });
       setDescription(data.description);
+      if (!data.description.trim()) {
+        setAIError("Gemini から空の説明文が返されました");
+      }
+    } catch (err) {
+      setAIError(err instanceof Error ? err.message : "説明文の生成に失敗しました");
     } finally {
       setLoadingAI(false);
     }
@@ -574,6 +581,7 @@ function CreateItemScreen({
             <Sparkles size={18} />
             {loadingAI ? "生成中" : "Geminiで説明生成"}
           </button>
+          {aiError && <p className="error">{aiError}</p>}
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="商品説明" />
           <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="画像URL" />
           <button className="primary-button" disabled={!description} type="submit">
@@ -605,6 +613,8 @@ function ItemDetailScreen({
 }) {
   const [question, setQuestion] = useState("通勤用として雨の日にも使えそう？");
   const [answer, setAnswer] = useState("");
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [aiError, setAIError] = useState("");
 
   if (!item) {
     return (
@@ -622,11 +632,23 @@ function ItemDetailScreen({
   const currentItem = item;
 
   async function askAI() {
-    const data = await api<{ answer: string }>("/ai/ask", {
-      method: "POST",
-      body: JSON.stringify({ itemId: currentItem.id, question })
-    });
-    setAnswer(data.answer);
+    setLoadingAI(true);
+    setAIError("");
+    setAnswer("");
+    try {
+      const data = await api<{ answer: string }>("/ai/ask", {
+        method: "POST",
+        body: JSON.stringify({ itemId: currentItem.id, question })
+      });
+      setAnswer(data.answer);
+      if (!data.answer.trim()) {
+        setAIError("Gemini から回答が返されませんでした");
+      }
+    } catch (err) {
+      setAIError(err instanceof Error ? err.message : "AIの回答取得に失敗しました");
+    } finally {
+      setLoadingAI(false);
+    }
   }
 
   async function like() {
@@ -702,10 +724,11 @@ function ItemDetailScreen({
           </div>
           <div className="ai-ask">
             <textarea value={question} onChange={(e) => setQuestion(e.target.value)} />
-            <button className="ai-button" onClick={askAI}>
+            <button className="ai-button" disabled={loadingAI} onClick={askAI}>
               <Bot size={18} />
-              AIに質問
+              {loadingAI ? "回答中" : "AIに質問"}
             </button>
+            {aiError && <p className="error">{aiError}</p>}
             {answer && <p className="ai-answer">{answer}</p>}
           </div>
         </article>
