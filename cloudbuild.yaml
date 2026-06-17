@@ -5,6 +5,23 @@ steps:
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${_TAG}
       - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${_TAG}
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${_TAG}
+      - --region
+      - ${_REGION}
+      - --project
+      - $PROJECT_ID
+      - --quiet
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${_TAG}
 options:
@@ -13,4 +30,5 @@ substitutions:
   _REGION: asia-northeast1
   _REPOSITORY: next-market-repo
   _IMAGE: next-market
+  _SERVICE: next-market
   _TAG: latest

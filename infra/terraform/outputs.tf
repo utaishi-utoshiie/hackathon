@@ -17,3 +17,11 @@ output "cloud_run_url" {
 output "openai_secret" {
   value = data.google_secret_manager_secret.openai_api_key.secret_id
 }
+
+output "uploads_bucket" {
+  value = google_storage_bucket.uploads.name
+}
+
+output "github_trigger" {
+  value = var.enable_github_trigger ? google_cloudbuild_trigger.github_main[0].name : null
+}

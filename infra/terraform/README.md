@@ -35,6 +35,12 @@ cd ../..
 gcloud builds submit --project term9-toshiie-shiomi --config cloudbuild.yaml .
 ```
 
+`cloudbuild.yaml` also deploys the pushed image to Cloud Run. For automatic deploys on GitHub `main` pushes, connect `toshtosh2024/hackathon` to Cloud Build's GitHub app first, then set:
+
+```hcl
+enable_github_trigger = true
+```
+
 Deploy the remaining resources:
 
 ```bash

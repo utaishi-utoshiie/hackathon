@@ -52,3 +52,27 @@ variable "cloud_run_min_instances" {
   type        = number
   default     = 1
 }
+
+variable "github_owner" {
+  description = "GitHub repository owner for the Cloud Build trigger."
+  type        = string
+  default     = "toshtosh2024"
+}
+
+variable "github_repository" {
+  description = "GitHub repository name for the Cloud Build trigger."
+  type        = string
+  default     = "hackathon"
+}
+
+variable "github_branch_regex" {
+  description = "Branch regex that triggers automatic deployment."
+  type        = string
+  default     = "^main$"
+}
+
+variable "enable_github_trigger" {
+  description = "Create the GitHub Cloud Build trigger. Requires the GitHub repository to be connected to Cloud Build first."
+  type        = bool
+  default     = false
+}
