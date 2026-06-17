@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -120,7 +121,7 @@ func main() {
 
 	port := env("PORT", "8080")
 	log.Printf("backend listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, a.cors(mux)))
+	log.Fatal(http.ListenAndServe(":"+port, a.cors(withFrontend(mux))))
 }
 
 func (a *app) cors(next http.Handler) http.Handler {
@@ -137,6 +138,45 @@ func (a *app) cors(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func withFrontend(api http.Handler) http.Handler {
+	staticDir, ok := findFrontendDir()
+	if !ok {
+		return api
+	}
+
+	fileServer := http.FileServer(http.Dir(staticDir))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			api.ServeHTTP(w, r)
+			return
+		}
+
+		target := filepath.Join(staticDir, filepath.Clean(r.URL.Path))
+		if info, err := os.Stat(target); err == nil && !info.IsDir() {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
+	})
+}
+
+func findFrontendDir() (string, bool) {
+	candidates := []string{
+		"./public",
+		"public",
+		"../frontend/dist",
+	}
+
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate, true
+		}
+	}
+
+	return "", false
 }
 
 func (a *app) isAllowedOrigin(origin string) bool {

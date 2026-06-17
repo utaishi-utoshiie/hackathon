@@ -6,6 +6,7 @@ import {
   Heart,
   Home,
   LogIn,
+  LogOut,
   MessageCircle,
   PackagePlus,
   Send,
@@ -17,7 +18,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://localhost:8080/api" : "/api");
 
 type User = {
   id: number;
@@ -82,6 +83,26 @@ const PRIMARY_NAV: NavItem[] = [
 
 function MarkdownBlock({ text, className }: { text: string; className?: string }) {
   return <div className={className ? `markdown-block ${className}` : "markdown-block"} dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
+}
+
+function IconLabel({
+  icon: Icon,
+  label,
+  value,
+  className
+}: {
+  icon: typeof Home;
+  label: string;
+  value?: string | number;
+  className?: string;
+}) {
+  return (
+    <span className={className ? `icon-label ${className}` : "icon-label"}>
+      <Icon size={20} />
+      {value !== undefined ? <strong>{value}</strong> : null}
+      <small>{label}</small>
+    </span>
+  );
 }
 
 function App() {
@@ -191,16 +212,12 @@ function App() {
           <header className="topbar">
             <div>
               <p className="eyebrow">Next Market</p>
-              <h1>売る、見つける、つながる。</h1>
-              <p className="lede">メルカリのように役割ごとにページを分け、ホームから出品やDMへ自然に移れる構成に再設計しました。</p>
+              <h1>売る。見る。話す。</h1>
             </div>
             <div className="session-card">
-              <div>
-                <strong>{user?.name}</strong>
-                <p>{user?.email}</p>
-              </div>
+              <IconLabel icon={UserCircle2} label={user?.name ?? "User"} value={user?.email?.split("@")[0] ?? ""} className="session-badge" />
               <button className="ghost-button" onClick={logout}>
-                ログアウト
+                <IconLabel icon={LogOut} label="終了" />
               </button>
             </div>
           </header>
@@ -307,30 +324,15 @@ function AuthScreen({
       <div className="auth-hero">
         <p className="eyebrow">Next Market</p>
         <h1>フリマ体験を、最初の一画面から整える。</h1>
-        <p>
-          認証を最初に分離し、その後はホームを中心に「探す」「出品する」「やり取りする」をページ単位で遷移できるようにしました。
-        </p>
         <div className="auth-points">
           <article>
-            <Store size={18} />
-            <div>
-              <strong>ホームは一覧中心</strong>
-              <p>商品サムネイルと導線を集約し、まず何ができるかが分かる構成です。</p>
-            </div>
+            <IconLabel icon={Store} label="探す" />
           </article>
           <article>
-            <PackagePlus size={18} />
-            <div>
-              <strong>出品は独立画面</strong>
-              <p>説明文生成や入力を一箇所にまとめ、迷わず出品に集中できます。</p>
-            </div>
+            <IconLabel icon={PackagePlus} label="売る" />
           </article>
           <article>
-            <MessageCircle size={18} />
-            <div>
-              <strong>DMも別画面</strong>
-              <p>会話一覧とメッセージを切り離し、詳細画面のノイズを減らしています。</p>
-            </div>
+            <IconLabel icon={MessageCircle} label="話す" />
           </article>
         </div>
       </div>
@@ -340,7 +342,6 @@ function AuthScreen({
           <LogIn size={20} />
           <h2>{mode === "register" ? "新規登録" : "ログイン"}</h2>
         </div>
-        <p className="muted">認証後にホームへ遷移します。</p>
         <div className="segmented">
           <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>
             新規登録
@@ -368,13 +369,12 @@ function AuthScreen({
 function Navigation({ route }: { route: Route }) {
   return (
     <nav className="nav-bar">
-      {PRIMARY_NAV.map((item) => {
+          {PRIMARY_NAV.map((item) => {
         const Icon = item.icon;
         const active = route.page === item.page;
         return (
           <button key={item.page} className={active ? "nav-link active" : "nav-link"} onClick={() => navigate({ page: item.page })}>
-            <Icon size={18} />
-            {item.label}
+            <IconLabel icon={Icon} label={item.label} />
           </button>
         );
       })}
@@ -407,16 +407,13 @@ function HomeScreen({
       <div className="hero-card panel">
         <div className="hero-copy">
           <p className="eyebrow">Marketplace Home</p>
-          <h2>まずはホームで流れをつかむ</h2>
-          <p>商品一覧を主役にしつつ、出品・DM・売上確認への入口をまとめたメイン画面です。</p>
+          <h2>ホーム</h2>
           <div className="hero-actions">
             <button className="primary-button" onClick={onOpenSell}>
-              <PackagePlus size={18} />
-              出品する
+              <IconLabel icon={PackagePlus} label="出品" />
             </button>
             <button className="ghost-button" onClick={onOpenMessages}>
-              <MessageCircle size={18} />
-              DMを見る
+              <IconLabel icon={MessageCircle} label="DM" />
             </button>
           </div>
         </div>
@@ -435,16 +432,13 @@ function HomeScreen({
 
       <div className="stats-grid">
         <article className="stat-card panel">
-          <span>出品中</span>
-          <strong>{activeCount}</strong>
+          <IconLabel icon={ShoppingBag} label="出品中" value={activeCount} />
         </article>
         <article className="stat-card panel">
-          <span>売却済み</span>
-          <strong>{soldCount}</strong>
+          <IconLabel icon={WalletCards} label="売却済" value={soldCount} />
         </article>
         <article className="stat-card panel">
-          <span>総いいね</span>
-          <strong>{likedTotal}</strong>
+          <IconLabel icon={Heart} label="いいね" value={likedTotal} />
         </article>
       </div>
 
@@ -477,29 +471,20 @@ function HomeScreen({
           <div className="section-head">
             <div>
               <p className="eyebrow">Shortcut</p>
-              <h3>次にやること</h3>
+              <h3>導線</h3>
             </div>
           </div>
           <button className="shortcut-row" onClick={onOpenSell}>
-            <span>
-              <strong>商品を出品する</strong>
-              <small>AIで説明文を作って公開</small>
-            </span>
+            <IconLabel icon={PackagePlus} label="出品" />
             <ChevronRight size={18} />
           </button>
           <button className="shortcut-row" onClick={onOpenMessages}>
-            <span>
-              <strong>DMを確認する</strong>
-              <small>購入前の相談や値段交渉へ</small>
-            </span>
+            <IconLabel icon={MessageCircle} label="DM" />
             <ChevronRight size={18} />
           </button>
           {leadItem && (
             <button className="shortcut-row" onClick={() => onOpenItem(leadItem.id)}>
-              <span>
-                <strong>おすすめ商品を見る</strong>
-                <small>{leadItem.title} の詳細へ</small>
-              </span>
+              <IconLabel icon={ShoppingBag} label="詳細" />
               <ChevronRight size={18} />
             </button>
           )}
@@ -559,19 +544,17 @@ function CreateItemScreen({
       <div className="split-heading">
         <div>
           <p className="eyebrow">Sell</p>
-          <h2>出品ページ</h2>
-          <p className="muted">ホームから移動して、出品作業だけに集中できる画面です。</p>
+          <h2>出品</h2>
         </div>
         <button className="ghost-button" onClick={() => navigate({ page: "home" })}>
-          <Home size={18} />
-          ホームへ戻る
+          <IconLabel icon={Home} label="戻る" />
         </button>
       </div>
 
       <section className="panel form-panel">
         <div className="panel-heading">
           <PackagePlus size={20} />
-          <h3>商品情報を入力</h3>
+          <h3>入力</h3>
         </div>
         <form onSubmit={submit}>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="商品名" />
@@ -712,16 +695,13 @@ function ItemDetailScreen({
           <MarkdownBlock className="item-description" text={item.description} />
           <div className="detail-actions">
             <button onClick={like}>
-              <Heart size={18} />
-              {item.likeCount}
+              <IconLabel icon={Heart} label="いいね" value={item.likeCount} />
             </button>
             <button disabled={!user || item.status !== "active"} onClick={messageSeller}>
-              <MessageCircle size={18} />
-              DMする
+              <IconLabel icon={MessageCircle} label="DM" />
             </button>
             <button disabled={!user || item.status !== "active"} onClick={purchase}>
-              <WalletCards size={18} />
-              購入する
+              <IconLabel icon={WalletCards} label="購入" />
             </button>
           </div>
           <div className="status-chip">{item.status === "active" ? "販売中" : "売却済み"}</div>
@@ -780,8 +760,7 @@ function MessagesScreen({
       <div className="split-heading">
         <div>
           <p className="eyebrow">Messages</p>
-          <h2>DMページ</h2>
-          <p className="muted">詳細ページから作成した会話を、ここでまとめて管理します。</p>
+          <h2>DM</h2>
         </div>
       </div>
 
@@ -798,8 +777,8 @@ function MessagesScreen({
                 className={selectedConversation?.id === conversation.id ? "conversation active" : "conversation"}
                 onClick={() => onSelect(conversation.id)}
               >
+                <IconLabel icon={MessageCircle} label={formatDate(conversation.updatedAt)} />
                 <strong>{conversation.itemTitle}</strong>
-                <small>更新: {formatDate(conversation.updatedAt)}</small>
               </button>
             ))}
             {conversations.length === 0 && <p className="muted">会話はまだありません。</p>}
@@ -848,12 +827,10 @@ function MyPageScreen({
       <div className="split-heading">
         <div>
           <p className="eyebrow">My Page</p>
-          <h2>{user?.name} さんのマイページ</h2>
-          <p className="muted">自分の出品状況を確認し、必要ならそのまま新規出品へ移れます。</p>
+          <h2>マイページ</h2>
         </div>
         <button className="primary-button" onClick={onOpenSell}>
-          <PackagePlus size={18} />
-          新しく出品
+          <IconLabel icon={PackagePlus} label="新規" />
         </button>
       </div>
 

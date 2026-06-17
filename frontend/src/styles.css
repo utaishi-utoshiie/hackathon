@@ -127,13 +127,12 @@ textarea {
 }
 
 .auth-points article {
-  align-items: start;
+  align-items: center;
   background: rgba(255, 255, 255, 0.55);
   border: 1px solid rgba(36, 70, 58, 0.09);
   border-radius: 24px;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 20px 1fr;
+  display: flex;
+  justify-content: center;
   padding: 18px;
 }
 
@@ -247,6 +246,27 @@ form {
   min-height: 48px;
 }
 
+.icon-label {
+  align-items: center;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+  line-height: 1;
+  text-align: center;
+}
+
+.icon-label strong {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.icon-label small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .primary-button,
 .ai-button {
   color: white;
@@ -286,19 +306,21 @@ form {
   display: block;
 }
 
+.session-badge {
+  min-width: 92px;
+}
+
 .nav-bar {
-  display: flex;
+  display: grid;
   gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 20px;
-  overflow-x: auto;
-  padding-bottom: 4px;
 }
 
 .nav-link {
   background: rgba(255, 255, 255, 0.6);
   color: #345243;
-  padding: 0 18px;
-  white-space: nowrap;
+  padding: 14px 10px;
 }
 
 .nav-link.active {
@@ -355,6 +377,10 @@ form {
   margin: 0;
 }
 
+.hero-actions {
+  align-items: stretch;
+}
+
 .featured-card,
 .catalog-card,
 .conversation,
@@ -408,13 +434,8 @@ form {
 }
 
 .stat-card {
-  display: grid;
-  gap: 4px;
-}
-
-.stat-card span {
-  color: #69756f;
-  font-size: 14px;
+  display: flex;
+  justify-content: center;
 }
 
 .content-grid {
@@ -455,11 +476,6 @@ form {
   display: flex;
   justify-content: space-between;
   padding: 16px;
-}
-
-.shortcut-row span {
-  display: grid;
-  gap: 4px;
 }
 
 .split-heading {
@@ -611,6 +627,10 @@ form {
   padding: 0 14px;
 }
 
+.detail-actions button {
+  min-height: 86px;
+}
+
 .status-chip {
   background: #f8efe5;
   border-radius: 999px;
@@ -646,7 +666,7 @@ form {
 
 .conversation {
   display: grid;
-  gap: 4px;
+  gap: 10px;
   justify-content: start;
   padding: 16px;
 }
@@ -741,11 +761,7 @@ form {
   }
 
   .nav-bar {
-    padding-bottom: 10px;
-  }
-
-  .nav-link {
-    flex: 1 0 auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .message {

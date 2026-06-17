@@ -18,7 +18,7 @@ Web開発
 * 商品購入: 購入フロー（決済API連携は不要）
 * DM機能: ユーザー間でのメッセージ交換
 * Gemini API連携: 商品説明の自動生成や質問応答機能
-* デプロイ: バックエンドはCloudRun, フロントエンドはVercelを用いる。また、DBに関してはCloudSQLを用いる
+* デプロイ: Go APIがフロントエンド配信も兼ねる形でCloud Runへデプロイする。DBに関してはCloudSQLを用いる
 
 発展的な実装の例
 中級レベル
@@ -137,7 +137,7 @@ export $(grep -v '^#' .env | xargs)
 go run ./cmd/api
 ```
 
-### Frontend
+### Frontend 開発
 
 ```bash
 cd frontend
@@ -147,7 +147,22 @@ npm run dev
 
 ## デプロイ方針
 
-- Backend: `backend/Dockerfile` をCloud Runへデプロイ
-- Frontend: `frontend/` をVercelへデプロイ
+- App: `backend/Dockerfile` で frontend をビルドして backend に同梱し、Cloud Runへデプロイ
 - DB: Cloud SQL for MySQLを作成し、Cloud Runの `DATABASE_DSN` に接続文字列を設定
 - AI: Cloud Runの環境変数に `GEMINI_API_KEY` を設定
+
+## Vercel なしで動かす
+
+frontend を build すると backend からそのまま配信できます。
+
+```bash
+cd frontend
+npm install
+npm run build
+
+cd ../backend
+export $(grep -v '^#' .env | xargs)
+go run ./cmd/api
+```
+
+この場合は `http://localhost:8080` を開くと、frontend と API の両方が backend から配信されます。
