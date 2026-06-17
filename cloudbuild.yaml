@@ -3,13 +3,11 @@ steps:
     args:
       - build
       - -t
-      - $_IMAGE
+      - gcr.io/$PROJECT_ID/backend:$COMMIT_SHA
       - -f
       - backend/Dockerfile
       - backend
-substitutions:
-  _IMAGE: gcr.io/$PROJECT_ID/backend:$COMMIT_SHA
 images:
-  - $_IMAGE
+  - gcr.io/$PROJECT_ID/backend:$COMMIT_SHA
 options:
   logging: CLOUD_LOGGING_ONLY
