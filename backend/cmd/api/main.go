@@ -73,9 +73,9 @@ type authUserKey struct{}
 
 func main() {
 	_ = godotenv.Load()
-	dsn := os.Getenv("DATABASE_DSN")
-	if dsn == "" {
-		log.Fatal("DATABASE_DSN is required")
+	dsn, err := resolveDSN()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	db, err := sql.Open("mysql", dsn)
@@ -177,6 +177,31 @@ func findFrontendDir() (string, bool) {
 	}
 
 	return "", false
+}
+
+func resolveDSN() (string, error) {
+	if dsn := os.Getenv("DATABASE_DSN"); dsn != "" {
+		return dsn, nil
+	}
+
+	dbUser := os.Getenv("DB_USER")
+	dbPass := os.Getenv("DB_PASS")
+	dbName := os.Getenv("DB_NAME")
+	if dbUser == "" || dbPass == "" || dbName == "" {
+		return "", errors.New("DATABASE_DSN is required, or set DB_USER, DB_PASS, DB_NAME, and INSTANCE_UNIX_SOCKET/DB_HOST for Cloud Run")
+	}
+
+	if unixSocket := os.Getenv("INSTANCE_UNIX_SOCKET"); unixSocket != "" {
+		return fmt.Sprintf("%s:%s@unix(%s)/%s?parseTime=true&multiStatements=true", dbUser, dbPass, unixSocket, dbName), nil
+	}
+
+	host := env("DB_HOST", "")
+	if host == "" {
+		return "", errors.New("missing database host: set DATABASE_DSN, or DB_USER/DB_PASS/DB_NAME with INSTANCE_UNIX_SOCKET or DB_HOST")
+	}
+
+	port := env("DB_PORT", "3306")
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&multiStatements=true", dbUser, dbPass, host, port, dbName), nil
 }
 
 func (a *app) isAllowedOrigin(origin string) bool {

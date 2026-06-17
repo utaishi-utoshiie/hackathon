@@ -148,7 +148,7 @@ npm run dev
 ## デプロイ方針
 
 - App: `backend/Dockerfile` で frontend をビルドして backend に同梱し、Cloud Runへデプロイ
-- DB: Cloud SQL for MySQLを作成し、Cloud Runの `DATABASE_DSN` に接続文字列を設定
+- DB: Cloud SQL for MySQLを作成し、Cloud Runには `DATABASE_DSN` か `DB_USER` `DB_PASS` `DB_NAME` `INSTANCE_UNIX_SOCKET` を設定
 - AI: Cloud Runの環境変数に `GEMINI_API_KEY` を設定
 
 ## Vercel なしで動かす
@@ -166,3 +166,12 @@ go run ./cmd/api
 ```
 
 この場合は `http://localhost:8080` を開くと、frontend と API の両方が backend から配信されます。
+
+### Cloud Run の DB 設定メモ
+
+Cloud Run ではローカル用の `127.0.0.1:3306` DSN をそのまま使わず、Cloud SQL 接続を設定した上で、次のどちらかで渡します。
+
+1. `DATABASE_DSN`
+2. `DB_USER`, `DB_PASS`, `DB_NAME`, `INSTANCE_UNIX_SOCKET=/cloudsql/PROJECT:REGION:INSTANCE`
+
+`INSTANCE_UNIX_SOCKET` を使う場合は、Cloud Run サービスに Cloud SQL 接続を追加して `/cloudsql/...` が見える状態にする必要があります。
