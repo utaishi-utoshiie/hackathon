@@ -800,6 +800,87 @@ form {
   width: 56px;
 }
 
+.conversation-item-card {
+  align-items: stretch;
+  background: #fff7f1;
+  border: 1px solid #eadfd3;
+  color: #1f2933;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 104px minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+}
+
+.conversation-item-card img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.conversation-item-copy {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px 14px 0;
+}
+
+.conversation-counterpart {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.conversation-counterpart img,
+.profile-avatar {
+  border-radius: 999px;
+  height: 42px;
+  object-fit: cover;
+  width: 42px;
+}
+
+.profile-panel {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.profile-avatar {
+  border: 3px solid #f0e6da;
+  height: 76px;
+  width: 76px;
+}
+
+.profile-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.compact-upload {
+  min-height: 52px;
+  padding: 10px 14px;
+}
+
+.my-item-card {
+  align-content: start;
+}
+
+.my-item-actions {
+  display: flex;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.my-item-actions button {
+  flex: 1;
+}
+
+.danger-button {
+  background: #f9dfd8;
+  color: #9d372c;
+}
+
 .compact-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -824,6 +905,11 @@ form {
   .compact-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .profile-panel {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
 }
 
 @media (max-width: 720px) {
@@ -844,6 +930,7 @@ form {
   .card-grid,
   .compact-grid,
   .detail-actions,
+  .conversation-item-card,
   .filter-bar,
   .image-preview-row,
   .two-col {

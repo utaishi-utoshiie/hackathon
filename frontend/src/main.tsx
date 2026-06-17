@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Bot,
+  CircleOff,
   ChevronRight,
   Heart,
   Home,
@@ -28,6 +29,7 @@ type User = {
   name: string;
   email: string;
   role: string;
+  avatarUrl: string;
 };
 
 type Item = {
@@ -48,8 +50,15 @@ type Conversation = {
   id: number;
   itemId: number;
   itemTitle: string;
+  itemPrice: number;
+  itemStatus: "active" | "sold" | "hidden";
+  itemImageUrl: string;
+  itemCategory: string;
   buyerId: number;
   sellerId: number;
+  counterpartId: number;
+  counterpartName: string;
+  counterpartAvatarUrl: string;
   updatedAt: string;
 };
 
@@ -135,6 +144,7 @@ function App() {
   const [itemFilters, setItemFilters] = useState({ q: "", category: "", minPrice: "", maxPrice: "" });
   const [itemsLoading, setItemsLoading] = useState(false);
   const [itemsError, setItemsError] = useState("");
+  const [myItems, setMyItems] = useState<Item[]>([]);
 
   useEffect(() => {
     void loadItems(itemFilters);
@@ -145,9 +155,11 @@ function App() {
       setConversations([]);
       setMessages([]);
       setSelectedConversationId(null);
+      setMyItems([]);
       return;
     }
     void loadConversations();
+    void loadMyItems();
   }, [token]);
 
   useEffect(() => {
@@ -167,7 +179,6 @@ function App() {
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId) ?? null;
   const activeCount = items.filter((item) => item.status === "active").length;
   const soldCount = items.filter((item) => item.status === "sold").length;
-  const myItems = user ? items.filter((item) => item.sellerId === user.id) : [];
   const likedTotal = items.reduce((sum, item) => sum + item.likeCount, 0);
 
   async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -207,6 +218,11 @@ function App() {
     }
   }
 
+  async function loadMyItems() {
+    const data = await api<{ items: Item[] }>("/my/items");
+    setMyItems(data.items);
+  }
+
   async function loadMessages(conversationId: number) {
     setSelectedConversationId(conversationId);
     const data = await api<{ messages: Message[] }>(`/conversations/${conversationId}/messages`);
@@ -222,6 +238,13 @@ function App() {
     navigate({ page: "home" });
   }
 
+  function updateSession(nextToken: string, nextUser: User) {
+    setToken(nextToken);
+    setUser(nextUser);
+    localStorage.setItem("token", nextToken);
+    localStorage.setItem("user", JSON.stringify(nextUser));
+  }
+
   function logout() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -233,6 +256,9 @@ function App() {
 
   async function refreshItemsAndKeepSelection(itemId?: number) {
     await loadItems(itemFilters);
+    if (token) {
+      await loadMyItems();
+    }
     if (itemId) {
       navigate({ page: "item", itemId });
     }
@@ -282,6 +308,7 @@ function App() {
               api={api}
               onCreated={(item) => {
                 setItems((current) => [item, ...current]);
+                void loadMyItems();
                 setNotice("商品を出品しました");
                 navigate({ page: "item", itemId: item.id });
               }}
@@ -312,6 +339,7 @@ function App() {
               messages={messages}
               api={api}
               onSelect={(conversationId) => void loadMessages(conversationId)}
+              onOpenItem={(itemId) => navigate({ page: "item", itemId })}
             />
           )}
 
@@ -319,8 +347,14 @@ function App() {
             <MyPageScreen
               user={user}
               myItems={myItems}
+              api={api}
+              onSessionUpdated={updateSession}
               onOpenSell={() => navigate({ page: "sell" })}
               onOpenItem={(itemId) => navigate({ page: "item", itemId })}
+              onCancelled={async (itemId) => {
+                await Promise.all([loadItems(itemFilters), loadMyItems()]);
+                setNotice(`出品を取り下げました: #${itemId}`);
+              }}
             />
           )}
         </>
@@ -801,6 +835,7 @@ function ItemDetailScreen({
   const [answer, setAnswer] = useState("");
   const [loadingAI, setLoadingAI] = useState(false);
   const [aiError, setAIError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
   if (!item) {
     return (
@@ -858,6 +893,19 @@ function ItemDetailScreen({
     await onConversationCreated(data.conversationId);
   }
 
+  async function cancelListing() {
+    setCancelling(true);
+    try {
+      await api<{ item: Item }>(`/items/${currentItem.id}/cancel`, { method: "POST" });
+      onNotice("出品を取り下げました");
+      onChanged(currentItem.id);
+    } catch (err) {
+      onNotice(err instanceof Error ? err.message : "出品の取り下げに失敗しました");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <section className="page-shell">
       <div className="split-heading">
@@ -893,11 +941,17 @@ function ItemDetailScreen({
             <button disabled={!user || item.status !== "active"} onClick={messageSeller}>
               <IconLabel icon={MessageCircle} label="DM" />
             </button>
-            <button disabled={!user || item.status !== "active"} onClick={purchase}>
-              <IconLabel icon={WalletCards} label="購入" />
-            </button>
+            {user?.id === item.sellerId ? (
+              <button disabled={item.status !== "active" || cancelling} onClick={() => void cancelListing()}>
+                <IconLabel icon={CircleOff} label={cancelling ? "取消中" : "取消"} />
+              </button>
+            ) : (
+              <button disabled={!user || item.status !== "active"} onClick={purchase}>
+                <IconLabel icon={WalletCards} label="購入" />
+              </button>
+            )}
           </div>
-          <div className="status-chip">{item.status === "active" ? "販売中" : "売却済み"}</div>
+          <div className="status-chip">{statusLabel(item.status)}</div>
         </article>
 
         <article className="panel ai-panel">
@@ -926,7 +980,8 @@ function MessagesScreen({
   selectedConversation,
   messages,
   api,
-  onSelect
+  onSelect,
+  onOpenItem
 }: {
   user: User | null;
   conversations: Conversation[];
@@ -934,6 +989,7 @@ function MessagesScreen({
   messages: Message[];
   api: <T>(path: string, options?: RequestInit) => Promise<T>;
   onSelect: (conversationId: number) => void;
+  onOpenItem: (itemId: number) => void;
 }) {
   const [body, setBody] = useState("購入前に状態をもう少し教えてください。");
 
@@ -983,6 +1039,22 @@ function MessagesScreen({
             <Send size={20} />
             <h3>{selectedConversation ? selectedConversation.itemTitle : "メッセージ"}</h3>
           </div>
+          {selectedConversation && (
+            <button className="conversation-item-card" onClick={() => onOpenItem(selectedConversation.itemId)}>
+              <img src={selectedConversation.itemImageUrl || "/placeholder.svg"} alt="" />
+              <div className="conversation-item-copy">
+                <div className="conversation-counterpart">
+                  <img src={selectedConversation.counterpartAvatarUrl || "/placeholder-avatar.svg"} alt="" />
+                  <strong>{selectedConversation.counterpartName}</strong>
+                </div>
+                <strong>{selectedConversation.itemTitle}</strong>
+                <span>¥{selectedConversation.itemPrice.toLocaleString()}</span>
+                <small>
+                  {selectedConversation.itemCategory} / {statusLabel(selectedConversation.itemStatus)}
+                </small>
+              </div>
+            </button>
+          )}
           <div className="message-list">
             {messages.map((message) => (
               <p key={message.id} className={message.senderId === user?.id ? "message mine" : "message"}>
@@ -1007,14 +1079,61 @@ function MessagesScreen({
 function MyPageScreen({
   user,
   myItems,
+  api,
+  onSessionUpdated,
   onOpenSell,
-  onOpenItem
+  onOpenItem,
+  onCancelled
 }: {
   user: User | null;
   myItems: Item[];
+  api: <T>(path: string, options?: RequestInit) => Promise<T>;
+  onSessionUpdated: (token: string, user: User) => void;
   onOpenSell: () => void;
   onOpenItem: (itemId: number) => void;
+  onCancelled: (itemId: number) => Promise<void>;
 }) {
+  const [uploading, setUploading] = useState(false);
+  const [profileError, setProfileError] = useState("");
+
+  async function uploadAvatar(file: File | null) {
+    if (!file || !user) return;
+    setUploading(true);
+    setProfileError("");
+    try {
+      const signed = await api<{ uploadUrl: string; publicUrl: string; contentType: string }>("/upload", {
+        method: "POST",
+        body: JSON.stringify({ filename: file.name, contentType: file.type })
+      });
+      const response = await fetch(signed.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": signed.contentType },
+        body: file
+      });
+      if (!response.ok) {
+        throw new Error("プロフィール画像のアップロードに失敗しました");
+      }
+      const updated = await api<{ user: User; token: string }>("/profile", {
+        method: "POST",
+        body: JSON.stringify({ avatarUrl: signed.publicUrl, name: user.name })
+      });
+      onSessionUpdated(updated.token, updated.user);
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : "プロフィール画像の更新に失敗しました");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function cancelItem(itemId: number) {
+    try {
+      await api(`/items/${itemId}/cancel`, { method: "POST" });
+      await onCancelled(itemId);
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : "出品の取り下げに失敗しました");
+    }
+  }
+
   return (
     <section className="page-shell">
       <div className="split-heading">
@@ -1028,6 +1147,19 @@ function MyPageScreen({
       </div>
 
       <section className="panel mypage-panel">
+        <div className="profile-panel">
+          <img className="profile-avatar" src={user?.avatarUrl || "/placeholder-avatar.svg"} alt="" />
+          <div className="profile-copy">
+            <strong>{user?.name ?? "ユーザー"}</strong>
+            <small>{user?.email ?? ""}</small>
+          </div>
+          <label className="upload-drop compact-upload">
+            <UploadCloud size={18} />
+            <span>{uploading ? "更新中" : "写真を変更"}</span>
+            <input accept="image/*" disabled={uploading} type="file" onChange={(e) => void uploadAvatar(e.target.files?.[0] ?? null)} />
+          </label>
+        </div>
+        {profileError && <p className="error">{profileError}</p>}
         <div className="section-head">
           <div>
             <p className="eyebrow">My Listings</p>
@@ -1036,14 +1168,24 @@ function MyPageScreen({
         </div>
         <div className="card-grid compact-grid">
           {myItems.map((item) => (
-            <button key={item.id} className="catalog-card compact" onClick={() => onOpenItem(item.id)}>
+            <article key={item.id} className="catalog-card compact my-item-card">
               <img src={item.imageUrl || "/placeholder.svg"} alt="" />
               <div>
                 <strong>{item.title}</strong>
                 <span>¥{item.price.toLocaleString()}</span>
-                <small>{item.status}</small>
+                <small>{statusLabel(item.status)}</small>
               </div>
-            </button>
+              <div className="my-item-actions">
+                <button className="ghost-button" onClick={() => onOpenItem(item.id)}>
+                  詳細
+                </button>
+                {item.status === "active" && (
+                  <button className="ghost-button danger-button" onClick={() => void cancelItem(item.id)}>
+                    取り下げ
+                  </button>
+                )}
+              </div>
+            </article>
           ))}
           {myItems.length === 0 && <p className="muted">まだ出品がありません。最初の1品を登録しましょう。</p>}
         </div>
@@ -1085,6 +1227,12 @@ function navigate(route: Route) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+}
+
+function statusLabel(status: Item["status"] | Conversation["itemStatus"]) {
+  if (status === "sold") return "売却済み";
+  if (status === "hidden") return "公開停止";
+  return "販売中";
 }
 
 function renderMarkdown(source: string) {

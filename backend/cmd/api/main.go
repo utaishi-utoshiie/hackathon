@@ -47,10 +47,11 @@ type app struct {
 }
 
 type user struct {
-	ID    int64  `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	AvatarURL string `json:"avatarUrl"`
 }
 
 type item struct {
@@ -68,12 +69,19 @@ type item struct {
 }
 
 type conversation struct {
-	ID        int64     `json:"id"`
-	ItemID    int64     `json:"itemId"`
-	ItemTitle string    `json:"itemTitle"`
-	BuyerID   int64     `json:"buyerId"`
-	SellerID  int64     `json:"sellerId"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID                   int64     `json:"id"`
+	ItemID               int64     `json:"itemId"`
+	ItemTitle            string    `json:"itemTitle"`
+	ItemPrice            int       `json:"itemPrice"`
+	ItemStatus           string    `json:"itemStatus"`
+	ItemImageURL         string    `json:"itemImageUrl"`
+	ItemCategory         string    `json:"itemCategory"`
+	BuyerID              int64     `json:"buyerId"`
+	SellerID             int64     `json:"sellerId"`
+	CounterpartID        int64     `json:"counterpartId"`
+	CounterpartName      string    `json:"counterpartName"`
+	CounterpartAvatarURL string    `json:"counterpartAvatarUrl"`
+	UpdatedAt            time.Time `json:"updatedAt"`
 }
 
 type message struct {
@@ -117,10 +125,13 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", a.health)
 	mux.HandleFunc("POST /api/auth/register", a.register)
 	mux.HandleFunc("POST /api/auth/login", a.login)
+	mux.HandleFunc("POST /api/profile", a.requireAuth(a.updateProfile))
 	mux.HandleFunc("GET /api/items", a.listItems)
+	mux.HandleFunc("GET /api/my/items", a.requireAuth(a.listMyItems))
 	mux.HandleFunc("POST /api/items", a.requireAuth(a.createItem))
 	mux.HandleFunc("POST /api/upload", a.requireAuth(a.createUploadURL))
 	mux.HandleFunc("GET /api/items/{id}", a.getItem)
+	mux.HandleFunc("POST /api/items/{id}/cancel", a.requireAuth(a.cancelItem))
 	mux.HandleFunc("POST /api/items/{id}/like", a.requireAuth(a.toggleLike))
 	mux.HandleFunc("POST /api/items/{id}/purchase", a.requireAuth(a.purchaseItem))
 	mux.HandleFunc("GET /api/conversations", a.requireAuth(a.listConversations))
@@ -391,15 +402,43 @@ func (a *app) login(w http.ResponseWriter, r *http.Request) {
 	var u user
 	var passwordHash string
 	err := a.dbHandle().QueryRowContext(r.Context(),
-		"SELECT id, name, email, role, password_hash FROM users WHERE email = ?",
+		"SELECT id, name, email, role, COALESCE(avatar_url, ''), password_hash FROM users WHERE email = ?",
 		strings.ToLower(req.Email),
-	).Scan(&u.ID, &u.Name, &u.Email, &u.Role, &passwordHash)
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.AvatarURL, &passwordHash)
 	if err != nil || passwordHash != a.hashPassword(req.Password) {
 		writeError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"token": a.signToken(u), "user": u})
+}
+
+func (a *app) updateProfile(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	var req struct {
+		Name      string `json:"name"`
+		AvatarURL string `json:"avatarUrl"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = u.Name
+	}
+	avatarURL := strings.TrimSpace(req.AvatarURL)
+	if _, err := a.dbHandle().ExecContext(r.Context(), "UPDATE users SET name = ?, avatar_url = ? WHERE id = ?", name, avatarURL, u.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update profile")
+		return
+	}
+
+	updated, err := a.findUserByID(r.Context(), u.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load profile")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": updated, "token": a.signToken(updated)})
 }
 
 func (a *app) listItems(w http.ResponseWriter, r *http.Request) {
@@ -467,6 +506,36 @@ func (a *app) listItems(w http.ResponseWriter, r *http.Request) {
 	if err := rows.Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read items")
 		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (a *app) listMyItems(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	rows, err := a.dbHandle().QueryContext(r.Context(), `
+		SELECT i.id, i.seller_id, usr.name, i.title, i.description, i.category, i.price, i.status,
+		       COALESCE((SELECT image_url FROM item_images WHERE item_id = i.id ORDER BY sort_order LIMIT 1), ''),
+		       COUNT(l.item_id), i.created_at
+		FROM items i
+		JOIN users usr ON usr.id = i.seller_id
+		LEFT JOIN likes l ON l.item_id = i.id
+		WHERE i.seller_id = ?
+		GROUP BY i.id, i.seller_id, usr.name, i.title, i.description, i.category, i.price, i.status, i.created_at
+		ORDER BY i.created_at DESC`, u.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load your items")
+		return
+	}
+	defer rows.Close()
+
+	items := []item{}
+	for rows.Next() {
+		var it item
+		if err := rows.Scan(&it.ID, &it.SellerID, &it.SellerName, &it.Title, &it.Description, &it.Category, &it.Price, &it.Status, &it.ImageURL, &it.LikeCount, &it.CreatedAt); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to read item")
+			return
+		}
+		items = append(items, it)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -571,6 +640,41 @@ func (a *app) createItem(w http.ResponseWriter, r *http.Request) {
 
 	it, _ := a.findItem(r.Context(), itemID)
 	writeJSON(w, http.StatusCreated, map[string]any{"item": it})
+}
+
+func (a *app) cancelItem(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	itemID, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+
+	var sellerID int64
+	var status string
+	err := a.dbHandle().QueryRowContext(r.Context(), "SELECT seller_id, status FROM items WHERE id = ?", itemID).Scan(&sellerID, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "item not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load item")
+		return
+	}
+	if sellerID != u.ID {
+		writeError(w, http.StatusForbidden, "only the seller can cancel this item")
+		return
+	}
+	if status != "active" {
+		writeError(w, http.StatusBadRequest, "only active items can be cancelled")
+		return
+	}
+	if _, err := a.dbHandle().ExecContext(r.Context(), "UPDATE items SET status = 'hidden' WHERE id = ?", itemID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to cancel item")
+		return
+	}
+
+	it, _ := a.findItem(r.Context(), itemID)
+	writeJSON(w, http.StatusOK, map[string]any{"item": it})
 }
 
 func (a *app) toggleLike(w http.ResponseWriter, r *http.Request) {
@@ -692,11 +796,19 @@ func (a *app) createConversation(w http.ResponseWriter, r *http.Request) {
 func (a *app) listConversations(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	rows, err := a.dbHandle().QueryContext(r.Context(), `
-		SELECT c.id, c.item_id, i.title, c.buyer_id, c.seller_id, c.updated_at
+		SELECT c.id, c.item_id, i.title, i.price, i.status,
+		       COALESCE((SELECT image_url FROM item_images WHERE item_id = i.id ORDER BY sort_order LIMIT 1), ''),
+		       i.category, c.buyer_id, c.seller_id,
+		       CASE WHEN c.buyer_id = ? THEN c.seller_id ELSE c.buyer_id END AS counterpart_id,
+		       CASE WHEN c.buyer_id = ? THEN seller.name ELSE buyer.name END AS counterpart_name,
+		       CASE WHEN c.buyer_id = ? THEN COALESCE(seller.avatar_url, '') ELSE COALESCE(buyer.avatar_url, '') END AS counterpart_avatar_url,
+		       c.updated_at
 		FROM conversations c
 		JOIN items i ON i.id = c.item_id
+		JOIN users buyer ON buyer.id = c.buyer_id
+		JOIN users seller ON seller.id = c.seller_id
 		WHERE c.buyer_id = ? OR c.seller_id = ?
-		ORDER BY c.updated_at DESC`, u.ID, u.ID)
+		ORDER BY c.updated_at DESC`, u.ID, u.ID, u.ID, u.ID, u.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load conversations")
 		return
@@ -706,7 +818,11 @@ func (a *app) listConversations(w http.ResponseWriter, r *http.Request) {
 	conversations := []conversation{}
 	for rows.Next() {
 		var c conversation
-		if err := rows.Scan(&c.ID, &c.ItemID, &c.ItemTitle, &c.BuyerID, &c.SellerID, &c.UpdatedAt); err != nil {
+		if err := rows.Scan(
+			&c.ID, &c.ItemID, &c.ItemTitle, &c.ItemPrice, &c.ItemStatus,
+			&c.ItemImageURL, &c.ItemCategory, &c.BuyerID, &c.SellerID,
+			&c.CounterpartID, &c.CounterpartName, &c.CounterpartAvatarURL, &c.UpdatedAt,
+		); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to read conversation")
 			return
 		}
@@ -885,6 +1001,15 @@ func (a *app) findItem(ctx context.Context, id int64) (item, error) {
 		WHERE i.id = ?`, id,
 	).Scan(&it.ID, &it.SellerID, &it.SellerName, &it.Title, &it.Description, &it.Category, &it.Price, &it.Status, &it.ImageURL, &it.LikeCount, &it.CreatedAt)
 	return it, err
+}
+
+func (a *app) findUserByID(ctx context.Context, id int64) (user, error) {
+	var u user
+	err := a.dbHandle().QueryRowContext(ctx,
+		"SELECT id, name, email, role, COALESCE(avatar_url, '') FROM users WHERE id = ?",
+		id,
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.AvatarURL)
+	return u, err
 }
 
 func (a *app) reviewItem(ctx context.Context, title string, description string, category string, condition string) (itemReview, error) {
@@ -1139,6 +1264,9 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			return err
 		}
+	}
+	if _, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT NULL AFTER role"); err != nil {
+		return err
 	}
 	return nil
 }

@@ -29,6 +29,8 @@
 - [x] Add image upload flow with Cloud Storage signed URLs.
 - [x] Add item search and filters.
 - [x] Stabilize Cloud Run DB startup for login.
+- [x] Add profile avatar upload and DM item summary.
+- [x] Add item cancellation flow.
 - [ ] Add basic tests.
 - [x] Add README startup steps.
 - [ ] Prepare demo script.
@@ -73,6 +75,14 @@
 - Added `scripts/stabilize-cloud-run-db.sh` for gcloud-based Cloud Run/Cloud SQL repair.
 - Added `docs/db-startup-troubleshooting.md` for contributors.
 - Added backend tests for DB startup guard responses and DSN resolution.
+
+### 2026-06-18 profile and DM updates
+
+- Added profile avatar upload support on My Page.
+- Added `POST /api/profile` to save avatar URLs.
+- Added `GET /api/my/items` so My Page can show hidden items after cancellation.
+- Added `POST /api/items/{id}/cancel` to hide active listings owned by the seller.
+- Expanded DM conversation payloads with item summary and counterpart avatar data.
 
 ## Remaining Notes
 

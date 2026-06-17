@@ -92,6 +92,12 @@ Request:
 }
 ```
 
+### GET /my/items
+
+Authorization: `Bearer <token>`
+
+Returns all items created by the current user, including hidden items.
+
 ### POST /upload
 
 Authorization: `Bearer <token>`
@@ -121,6 +127,12 @@ Response:
 ### GET /items/{id}
 
 Returns one item.
+
+### POST /items/{id}/cancel
+
+Authorization: `Bearer <token>`
+
+Hides an active listing owned by the current user.
 
 ### POST /items/{id}/like
 
@@ -154,12 +166,28 @@ Request:
 Authorization: `Bearer <token>`
 
 Returns conversations for the current user.
+Each conversation also includes item summary fields and counterpart profile info for the DM view.
 
 ### GET /conversations/{id}/messages
 
 Authorization: `Bearer <token>`
 
 Returns messages in a conversation.
+
+## Profile
+
+### POST /profile
+
+Authorization: `Bearer <token>`
+
+Request:
+
+```json
+{
+  "name": "Toshi",
+  "avatarUrl": "https://storage.googleapis.com/..."
+}
+```
 
 ### POST /conversations/{id}/messages
 
