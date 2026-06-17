@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -167,14 +168,31 @@ func (a *app) generateItemScene(w http.ResponseWriter, r *http.Request) {
 		rawAvatarRef = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150"
 	}
 
-	avatarBytes, avatarType, err := a.downloadImageAsset(r.Context(), rawAvatarRef)
-	if err != nil {
+	var avatarBytes, itemBytes []byte
+	var avatarType, itemType string
+	var avatarErr, itemErr error
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		avatarBytes, avatarType, avatarErr = a.downloadImageAsset(r.Context(), rawAvatarRef)
+	}()
+
+	go func() {
+		defer wg.Done()
+		itemBytes, itemType, itemErr = a.downloadImageAsset(r.Context(), it.ImageURL)
+	}()
+
+	wg.Wait()
+
+	if avatarErr != nil {
 		writeError(w, http.StatusBadGateway, "プロフィール画像を読み込めませんでした")
 		return
 	}
 
-	itemBytes, itemType, err := a.downloadImageAsset(r.Context(), it.ImageURL)
-	if err != nil {
+	if itemErr != nil {
 		writeError(w, http.StatusBadGateway, "商品画像を読み込めませんでした")
 		return
 	}
