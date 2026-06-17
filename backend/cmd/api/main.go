@@ -1735,7 +1735,7 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	if err := ensureColumn(ctx, db, "items", "ai_personality", "ALTER TABLE items ADD COLUMN ai_personality VARCHAR(50) NOT NULL DEFAULT 'standard' AFTER min_price"); err != nil {
 		return err
 	}
-	return ensureTable(ctx, db, `CREATE TABLE IF NOT EXISTS negotiations (
+	if err := ensureTable(ctx, db, `CREATE TABLE IF NOT EXISTS negotiations (
 		id BIGINT PRIMARY KEY AUTO_INCREMENT,
 		item_id BIGINT NOT NULL,
 		buyer_id BIGINT NOT NULL,
@@ -1749,7 +1749,23 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		CONSTRAINT fk_negotiations_item FOREIGN KEY (item_id) REFERENCES items(id),
 		CONSTRAINT fk_negotiations_buyer FOREIGN KEY (buyer_id) REFERENCES users(id),
 		CONSTRAINT fk_negotiations_seller FOREIGN KEY (seller_id) REFERENCES users(id)
-	)`)
+	)`); err != nil {
+		return err
+	}
+
+	if err := ensureIndex(ctx, db, "purchases", "idx_purchases_seller_created_at_price", "ALTER TABLE purchases ADD INDEX idx_purchases_seller_created_at_price (seller_id, created_at, price)"); err != nil {
+		return err
+	}
+	if err := ensureIndex(ctx, db, "items", "idx_items_seller_status_created_at", "ALTER TABLE items ADD INDEX idx_items_seller_status_created_at (seller_id, status, created_at)"); err != nil {
+		return err
+	}
+	if err := ensureIndex(ctx, db, "negotiations", "idx_negotiations_item_created_at", "ALTER TABLE negotiations ADD INDEX idx_negotiations_item_created_at (item_id, created_at)"); err != nil {
+		return err
+	}
+	if err := ensureIndex(ctx, db, "negotiations", "idx_negotiations_buyer_created_at", "ALTER TABLE negotiations ADD INDEX idx_negotiations_buyer_created_at (buyer_id, created_at)"); err != nil {
+		return err
+	}
+	return ensureIndex(ctx, db, "negotiations", "idx_negotiations_seller_created_at", "ALTER TABLE negotiations ADD INDEX idx_negotiations_seller_created_at (seller_id, created_at)")
 }
 
 func ensureColumn(ctx context.Context, db *sql.DB, table string, column string, alterSQL string) error {
@@ -2847,4 +2863,22 @@ func (a *app) getMyStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, res)
+}
+
+func ensureIndex(ctx context.Context, db *sql.DB, table string, index string, createSQL string) error {
+	var exists int
+	err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM information_schema.statistics
+		WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`,
+		table, index,
+	).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists > 0 {
+		return nil
+	}
+	_, err = db.ExecContext(ctx, createSQL)
+	return err
 }
