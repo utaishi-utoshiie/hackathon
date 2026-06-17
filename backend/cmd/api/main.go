@@ -2621,6 +2621,7 @@ func (a *app) negotiateItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "item not found")
 		return
 	}
+	// SECURITY PROTECTION: Sanitize product title to prevent prompt injection inside AI bargaining loop
 	cleanTitle := cleanForPrompt(it.Title)
 
 	if it.Status != "active" {

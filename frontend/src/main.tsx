@@ -2149,6 +2149,7 @@ function renderMarkdown(source: string) {
       flushParagraph();
       closeList();
       const level = Math.min(heading[1].length, 3);
+      // SECURITY FIX: Explicitly escape heading content before rendering to mitigate Stored XSS
       html.push(`<h${level}>${renderInline(escapeHtml(heading[2]))}</h${level}>`);
       continue;
     }
@@ -2159,6 +2160,7 @@ function renderMarkdown(source: string) {
         html.push("<ul>");
         inList = true;
       }
+      // SECURITY FIX: Explicitly escape bullet list content before rendering to mitigate Stored XSS
       html.push(`<li>${renderInline(escapeHtml(bullet[1]))}</li>`);
       continue;
     }
