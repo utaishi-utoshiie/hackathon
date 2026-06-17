@@ -179,6 +179,12 @@ func main() {
 	mux.HandleFunc("POST /api/ai/check-item", a.requireAuth(a.checkItem))
 	mux.HandleFunc("POST /api/ai/suggest-price", a.requireAuth(a.suggestPrice))
 
+	// Admin Dashboard Routes
+	mux.HandleFunc("GET /api/admin/stats", a.requireAdmin(a.getAdminStats))
+	mux.HandleFunc("GET /api/admin/moderations", a.requireAdmin(a.getAdminModerations))
+	mux.HandleFunc("GET /api/admin/users", a.requireAdmin(a.getAdminUsers))
+	mux.HandleFunc("PUT /api/admin/users/{id}/role", a.requireAdmin(a.updateUserRole))
+
 	port := env("PORT", "8080")
 	log.Printf("backend listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, a.cors(withFrontend(a.guardDB(mux)))))
@@ -2154,4 +2160,320 @@ func env(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// Admin Dashboard Structs and Handlers
+
+func (a *app) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return a.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		u := currentUser(r)
+		if u.Role != "admin" {
+			writeError(w, http.StatusForbidden, "forbidden: admin role required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+type adminStatsSummary struct {
+	TotalUsers        int64 `json:"totalUsers"`
+	TotalItems        int64 `json:"totalItems"`
+	TotalTransactions int64 `json:"totalTransactions"`
+	TotalRevenue      int64 `json:"totalRevenue"`
+}
+
+type dailySignup struct {
+	Date  string `json:"date"`
+	Count int64  `json:"count"`
+}
+
+type dailyTransaction struct {
+	Date    string `json:"date"`
+	TxCount int64  `json:"txCount"`
+	Revenue int64  `json:"revenue"`
+}
+
+type categoryStat struct {
+	Category   string `json:"category"`
+	ItemCount  int64  `json:"itemCount"`
+	TotalValue int64  `json:"totalValue"`
+}
+
+type adminStatsResponse struct {
+	Summary              adminStatsSummary  `json:"summary"`
+	DailySignups         []dailySignup      `json:"dailySignups"`
+	DailyTransactions    []dailyTransaction `json:"dailyTransactions"`
+	CategoryDistribution []categoryStat     `json:"categoryDistribution"`
+}
+
+func (a *app) getAdminStats(w http.ResponseWriter, r *http.Request) {
+	db := a.dbHandle()
+	if db == nil {
+		writeError(w, http.StatusServiceUnavailable, "database unavailable")
+		return
+	}
+
+	var totalUsers, totalItems, totalTransactions, totalRevenue int64
+
+	// Total Users
+	err := db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM users").Scan(&totalUsers)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get total users: "+err.Error())
+		return
+	}
+
+	// Total Items
+	err = db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM items").Scan(&totalItems)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get total items: "+err.Error())
+		return
+	}
+
+	// Total Transactions & Revenue
+	err = db.QueryRowContext(r.Context(), "SELECT COUNT(*), COALESCE(SUM(price), 0) FROM purchases WHERE status = 'completed'").Scan(&totalTransactions, &totalRevenue)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get purchase stats: "+err.Error())
+		return
+	}
+
+	// Daily Signups (Last 30 days)
+	rows, err := db.QueryContext(r.Context(), `
+		SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as dt, COUNT(*)
+		FROM users
+		WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+		GROUP BY dt
+		ORDER BY dt ASC
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get daily signups: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	dailySignups := []dailySignup{}
+	for rows.Next() {
+		var ds dailySignup
+		if err := rows.Scan(&ds.Date, &ds.Count); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to scan daily signups: "+err.Error())
+			return
+		}
+		dailySignups = append(dailySignups, ds)
+	}
+
+	// Daily Transactions & Revenue (Last 30 days)
+	rowsTx, err := db.QueryContext(r.Context(), `
+		SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as dt, COUNT(*), COALESCE(SUM(price), 0)
+		FROM purchases
+		WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND status = 'completed'
+		GROUP BY dt
+		ORDER BY dt ASC
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get daily transactions: "+err.Error())
+		return
+	}
+	defer rowsTx.Close()
+
+	dailyTransactions := []dailyTransaction{}
+	for rowsTx.Next() {
+		var dt dailyTransaction
+		if err := rowsTx.Scan(&dt.Date, &dt.TxCount, &dt.Revenue); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to scan daily transactions: "+err.Error())
+			return
+		}
+		dailyTransactions = append(dailyTransactions, dt)
+	}
+
+	// Category Distribution
+	rowsCat, err := db.QueryContext(r.Context(), `
+		SELECT category, COUNT(*), COALESCE(SUM(price), 0)
+		FROM items
+		GROUP BY category
+		ORDER BY COUNT(*) DESC
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get category stats: "+err.Error())
+		return
+	}
+	defer rowsCat.Close()
+
+	categoryDistribution := []categoryStat{}
+	for rowsCat.Next() {
+		var cs categoryStat
+		if err := rowsCat.Scan(&cs.Category, &cs.ItemCount, &cs.TotalValue); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to scan category stats: "+err.Error())
+			return
+		}
+		categoryDistribution = append(categoryDistribution, cs)
+	}
+
+	res := adminStatsResponse{
+		Summary: adminStatsSummary{
+			TotalUsers:        totalUsers,
+			TotalItems:        totalItems,
+			TotalTransactions: totalTransactions,
+			TotalRevenue:      totalRevenue,
+		},
+		DailySignups:         dailySignups,
+		DailyTransactions:    dailyTransactions,
+		CategoryDistribution: categoryDistribution,
+	}
+
+	writeJSON(w, http.StatusOK, res)
+}
+
+type adminModeration struct {
+	ID              int64     `json:"id"`
+	ItemID          int64     `json:"itemId"`
+	ItemTitle       string    `json:"itemTitle"`
+	UserID          int64     `json:"userId"`
+	UserName        string    `json:"userName"`
+	Prohibited      bool      `json:"prohibited"`
+	RiskLevel       string    `json:"riskLevel"`
+	Reasons         []string  `json:"reasons"`
+	BlockedKeywords []string  `json:"blockedKeywords"`
+	CreatedAt       time.Time `json:"createdAt"`
+}
+
+func splitClean(s string, sep string) []string {
+	if s == "" {
+		return []string{}
+	}
+	parts := strings.Split(s, sep)
+	var res []string
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			res = append(res, trimmed)
+		}
+	}
+	return res
+}
+
+func (a *app) getAdminModerations(w http.ResponseWriter, r *http.Request) {
+	db := a.dbHandle()
+	if db == nil {
+		writeError(w, http.StatusServiceUnavailable, "database unavailable")
+		return
+	}
+
+	rows, err := db.QueryContext(r.Context(), `
+		SELECT im.id, im.item_id, i.title, im.user_id, u.name, im.prohibited, im.risk_level, im.reasons, im.blocked_keywords, im.created_at
+		FROM item_moderations im
+		JOIN items i ON im.item_id = i.id
+		JOIN users u ON im.user_id = u.id
+		ORDER BY im.created_at DESC
+		LIMIT 100
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get moderations: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	moderations := []adminModeration{}
+	for rows.Next() {
+		var m adminModeration
+		var reasonsStr, keywordsStr string
+		err := rows.Scan(
+			&m.ID, &m.ItemID, &m.ItemTitle, &m.UserID, &m.UserName,
+			&m.Prohibited, &m.RiskLevel, &reasonsStr, &keywordsStr, &m.CreatedAt,
+		)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to scan moderation: "+err.Error())
+			return
+		}
+		m.Reasons = splitClean(reasonsStr, "\n")
+		m.BlockedKeywords = splitClean(keywordsStr, ",")
+		moderations = append(moderations, m)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"moderations": moderations})
+}
+
+type adminUser struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	AvatarURL string    `json:"avatarUrl"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (a *app) getAdminUsers(w http.ResponseWriter, r *http.Request) {
+	db := a.dbHandle()
+	if db == nil {
+		writeError(w, http.StatusServiceUnavailable, "database unavailable")
+		return
+	}
+
+	rows, err := db.QueryContext(r.Context(), `
+		SELECT id, name, email, role, COALESCE(avatar_url, ''), created_at
+		FROM users
+		ORDER BY created_at DESC
+		LIMIT 200
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get users: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	users := []adminUser{}
+	for rows.Next() {
+		var u adminUser
+		err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.AvatarURL, &u.CreatedAt)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to scan user: "+err.Error())
+			return
+		}
+		users = append(users, u)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"users": users})
+}
+
+func (a *app) updateUserRole(w http.ResponseWriter, r *http.Request) {
+	db := a.dbHandle()
+	if db == nil {
+		writeError(w, http.StatusServiceUnavailable, "database unavailable")
+		return
+	}
+
+	userID, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+
+	var req struct {
+		Role string `json:"role"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+
+	if req.Role != "user" && req.Role != "admin" {
+		writeError(w, http.StatusBadRequest, "invalid role: must be user or admin")
+		return
+	}
+
+	res, err := db.ExecContext(r.Context(), "UPDATE users SET role = ? WHERE id = ?", req.Role, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update user role: "+err.Error())
+		return
+	}
+
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	u, err := a.findUserByID(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load updated user")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"user": u})
 }

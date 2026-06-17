@@ -18,8 +18,10 @@ import {
   Sparkles,
   Star,
   Store,
+  TrendingUp,
   UploadCloud,
   UserCircle2,
+  Users,
   WalletCards
 } from "lucide-react";
 import "./styles.css";
@@ -116,7 +118,8 @@ type Route =
   | { page: "sell" }
   | { page: "messages" }
   | { page: "mypage" }
-  | { page: "item"; itemId: number };
+  | { page: "item"; itemId: number }
+  | { page: "admin"; subpage: "stats" | "moderations" | "users" };
 
 type NavPage = "home" | "sell" | "messages" | "mypage";
 
@@ -308,7 +311,7 @@ function App() {
             </div>
           </header>
 
-          <Navigation route={route} />
+          <Navigation route={route} user={user} />
 
           {notice && <p className="notice">{notice}</p>}
 
@@ -380,6 +383,14 @@ function App() {
                 await Promise.all([loadItems(itemFilters), loadMyItems()]);
                 setNotice(`出品を取り下げました: #${itemId}`);
               }}
+            />
+          )}
+
+          {route.page === "admin" && (
+            <AdminDashboardScreen
+              api={api}
+              currentSubpage={route.subpage}
+              onSubpageChange={(subpage) => navigate({ page: "admin", subpage })}
             />
           )}
         </>
@@ -464,10 +475,10 @@ function AuthScreen({
   );
 }
 
-function Navigation({ route }: { route: Route }) {
+function Navigation({ route, user }: { route: Route; user: User | null }) {
   return (
     <nav className="nav-bar">
-          {PRIMARY_NAV.map((item) => {
+      {PRIMARY_NAV.map((item) => {
         const Icon = item.icon;
         const active = route.page === item.page;
         return (
@@ -476,6 +487,11 @@ function Navigation({ route }: { route: Route }) {
           </button>
         );
       })}
+      {user?.role === "admin" && (
+        <button className={route.page === "admin" ? "nav-link active" : "nav-link"} onClick={() => navigate({ page: "admin", subpage: "stats" })}>
+          <IconLabel icon={ShieldAlert} label="管理画面" />
+        </button>
+      )}
     </nav>
   );
 }
@@ -1327,6 +1343,16 @@ function readRoute(): Route {
       return { page: "item", itemId };
     }
   }
+  if (hash.startsWith("admin/")) {
+    const sub = hash.split("/")[1] as "stats" | "moderations" | "users";
+    if (sub === "stats" || sub === "moderations" || sub === "users") {
+      return { page: "admin", subpage: sub };
+    }
+    return { page: "admin", subpage: "stats" };
+  }
+  if (hash === "admin") {
+    return { page: "admin", subpage: "stats" };
+  }
   if (hash === "home") return { page: "home" };
   return { page: "auth" };
 }
@@ -1340,9 +1366,11 @@ function navigate(route: Route) {
   const hash =
     route.page === "item"
       ? `item/${route.itemId}`
-      : route.page === "home"
-        ? "home"
-        : route.page;
+      : route.page === "admin"
+        ? `admin/${route.subpage}`
+        : route.page === "home"
+          ? "home"
+          : route.page;
   window.location.hash = hash;
 }
 
@@ -1468,6 +1496,447 @@ function loadUser() {
   } catch {
     return null;
   }
+}
+
+// ==========================================
+// Admin Dashboard Components
+// ==========================================
+
+interface AdminStats {
+  summary: {
+    totalUsers: number;
+    totalItems: number;
+    totalTransactions: number;
+    totalRevenue: number;
+  };
+  dailySignups: { date: string; count: number }[];
+  dailyTransactions: { date: string; txCount: number; revenue: number }[];
+  categoryDistribution: { category: string; itemCount: number; totalValue: number }[];
+}
+
+interface AdminModerationRecord {
+  id: number;
+  itemId: number;
+  itemTitle: string;
+  userId: number;
+  userName: string;
+  prohibited: boolean;
+  riskLevel: string;
+  reasons: string[];
+  blockedKeywords: string[];
+  createdAt: string;
+}
+
+interface AdminUserRecord {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  avatarUrl: string;
+  createdAt: string;
+}
+
+function AdminDashboardScreen({
+  api,
+  currentSubpage,
+  onSubpageChange,
+}: {
+  api: <T>(path: string, options?: RequestInit) => Promise<T>;
+  currentSubpage: "stats" | "moderations" | "users";
+  onSubpageChange: (subpage: "stats" | "moderations" | "users") => void;
+}) {
+  return (
+    <section className="screen admin-screen">
+      <div className="admin-header">
+        <h2 className="section-title">管理者ダッシュボード</h2>
+        <div className="admin-subnav">
+          <button
+            className={`tab-link ${currentSubpage === "stats" ? "active" : ""}`}
+            onClick={() => onSubpageChange("stats")}
+          >
+            <TrendingUp size={16} /> 分析・統計
+          </button>
+          <button
+            className={`tab-link ${currentSubpage === "moderations" ? "active" : ""}`}
+            onClick={() => onSubpageChange("moderations")}
+          >
+            <ShieldAlert size={16} /> AI出品審査履歴
+          </button>
+          <button
+            className={`tab-link ${currentSubpage === "users" ? "active" : ""}`}
+            onClick={() => onSubpageChange("users")}
+          >
+            <Users size={16} /> ユーザー管理
+          </button>
+        </div>
+      </div>
+
+      <div className="admin-content">
+        {currentSubpage === "stats" && <AdminStatsView api={api} />}
+        {currentSubpage === "moderations" && <AdminModerationView api={api} />}
+        {currentSubpage === "users" && <AdminUsersView api={api} />}
+      </div>
+    </section>
+  );
+}
+
+function AdminStatsView({
+  api,
+}: {
+  api: <T>(path: string, options?: RequestInit) => Promise<T>;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [stats, setStats] = useState<AdminStats | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    api<AdminStats>("/admin/stats")
+      .then((data) => {
+        setStats(data);
+        setError("");
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "統計データの取得に失敗しました");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="loading-state">読み込み中...</div>;
+  if (error) return <div className="error-message">{error}</div>;
+  if (!stats) return null;
+
+  const maxSignup = Math.max(...(stats.dailySignups || []).map((d) => d.count), 1);
+  const maxRevenue = Math.max(...(stats.dailyTransactions || []).map((d) => d.revenue), 1);
+  const maxItemCount = Math.max(...(stats.categoryDistribution || []).map((c) => c.itemCount), 1);
+
+  return (
+    <div className="admin-stats-view">
+      {/* Summary Cards */}
+      <div className="stats-cards-grid">
+        <div className="stat-card">
+          <h3>総ユーザー数</h3>
+          <p className="stat-number">{(stats.summary?.totalUsers || 0).toLocaleString()} 名</p>
+        </div>
+        <div className="stat-card">
+          <h3>総出品数</h3>
+          <p className="stat-number">{(stats.summary?.totalItems || 0).toLocaleString()} 点</p>
+        </div>
+        <div className="stat-card">
+          <h3>取引完了数</h3>
+          <p className="stat-number">{(stats.summary?.totalTransactions || 0).toLocaleString()} 件</p>
+        </div>
+        <div className="stat-card">
+          <h3>総売上高</h3>
+          <p className="stat-number primary">¥ {(stats.summary?.totalRevenue || 0).toLocaleString()}</p>
+        </div>
+      </div>
+
+      <div className="stats-charts-grid">
+        {/* Category Share */}
+        <div className="chart-container">
+          <h3>カテゴリー別出品割合</h3>
+          <div className="chart-list">
+            {(!stats.categoryDistribution || stats.categoryDistribution.length === 0) ? (
+              <p className="empty-text">データがありません</p>
+            ) : (
+              stats.categoryDistribution.map((item) => {
+                const pct = Math.round((item.itemCount / maxItemCount) * 100);
+                return (
+                  <div key={item.category} className="chart-bar-row">
+                    <div className="chart-bar-label">
+                      <span>{item.category}</span>
+                      <small>{item.itemCount} 点 (¥{(item.totalValue || 0).toLocaleString()})</small>
+                    </div>
+                    <div className="chart-bar-bg">
+                      <div className="chart-bar-fill" style={{ width: `${pct}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Daily Registrations */}
+        <div className="chart-container">
+          <h3>日別新規ユーザー登録数 (直近30日)</h3>
+          <div className="chart-list max-h-300">
+            {(!stats.dailySignups || stats.dailySignups.length === 0) ? (
+              <p className="empty-text">データがありません</p>
+            ) : (
+              stats.dailySignups.map((item) => {
+                const pct = Math.round((item.count / maxSignup) * 100);
+                return (
+                  <div key={item.date} className="chart-bar-row">
+                    <div className="chart-bar-label">
+                      <span>{item.date}</span>
+                      <strong>{item.count} 名</strong>
+                    </div>
+                    <div className="chart-bar-bg">
+                      <div className="chart-bar-fill accent" style={{ width: `${pct}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Daily Transactions */}
+        <div className="chart-container full-width">
+          <h3>日別取引売上高 (直近30日)</h3>
+          <div className="chart-list max-h-300">
+            {(!stats.dailyTransactions || stats.dailyTransactions.length === 0) ? (
+              <p className="empty-text">データがありません</p>
+            ) : (
+              stats.dailyTransactions.map((item) => {
+                const pct = Math.round((item.revenue / maxRevenue) * 100);
+                return (
+                  <div key={item.date} className="chart-bar-row">
+                    <div className="chart-bar-label">
+                      <span>{item.date} ({item.txCount} 件の取引)</span>
+                      <strong>¥ {(item.revenue || 0).toLocaleString()}</strong>
+                    </div>
+                    <div className="chart-bar-bg">
+                      <div className="chart-bar-fill primary-fill" style={{ width: `${pct}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminModerationView({
+  api,
+}: {
+  api: <T>(path: string, options?: RequestInit) => Promise<T>;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [moderations, setModerations] = useState<AdminModerationRecord[]>([]);
+
+  useEffect(() => {
+    setLoading(true);
+    api<{ moderations: AdminModerationRecord[] }>("/admin/moderations")
+      .then((data) => {
+        setModerations(data.moderations || []);
+        setError("");
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "審査履歴の取得に失敗しました");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="loading-state">読み込み中...</div>;
+  if (error) return <div className="error-message">{error}</div>;
+
+  return (
+    <div className="admin-moderation-view">
+      <h3>AI出品審査・不適切コンテンツ検知ログ</h3>
+      <p className="subtitle">OpenAIの画像・テキスト解析によって検知された不適切な出品の一覧です。</p>
+
+      {moderations.length === 0 ? (
+        <div className="empty-state">
+          <p>出品審査ログはまだありません。</p>
+        </div>
+      ) : (
+        <div className="table-responsive">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>日時</th>
+                <th>商品ID</th>
+                <th>商品名</th>
+                <th>出品者</th>
+                <th>リスク判定</th>
+                <th>出品禁止</th>
+                <th>検出キーワード</th>
+                <th>AI検知理由</th>
+              </tr>
+            </thead>
+            <tbody>
+              {moderations.map((m) => {
+                const badgeColor =
+                  m.riskLevel === "high"
+                    ? "danger"
+                    : m.riskLevel === "medium"
+                    ? "warning"
+                    : "success";
+                return (
+                  <tr key={m.id}>
+                    <td className="whitespace-nowrap small-text text-nowrap">
+                      {new Date(m.createdAt).toLocaleString("ja-JP", {
+                        month: "numeric",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td>#{m.itemId}</td>
+                    <td>
+                      <a href={`#item/${m.itemId}`} className="item-link">
+                        {m.itemTitle}
+                      </a>
+                    </td>
+                    <td className="small-text">{m.userName} (ID:{m.userId})</td>
+                    <td>
+                      <span className={`risk-badge ${badgeColor}`}>
+                        {m.riskLevel.toUpperCase()}
+                      </span>
+                    </td>
+                    <td>
+                      {m.prohibited ? (
+                        <span className="danger-text font-bold">禁止判定 (ブロック)</span>
+                      ) : (
+                        <span className="success-text">許可</span>
+                      )}
+                    </td>
+                    <td className="small-text max-w-150">
+                      {m.blockedKeywords.length > 0 ? (
+                        <div className="tag-list">
+                          {m.blockedKeywords.map((tag) => (
+                            <span key={tag} className="keyword-tag">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray">-</span>
+                      )}
+                    </td>
+                    <td className="small-text reasons-cell">
+                      <ul className="reasons-list">
+                        {m.reasons.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminUsersView({
+  api,
+}: {
+  api: <T>(path: string, options?: RequestInit) => Promise<T>;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [users, setUsers] = useState<AdminUserRecord[]>([]);
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
+
+  const loadUsers = () => {
+    setLoading(true);
+    api<{ users: AdminUserRecord[] }>("/admin/users")
+      .then((data) => {
+        setUsers(data.users || []);
+        setError("");
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "ユーザー一覧の取得に失敗しました");
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const changeRole = async (userId: number, newRole: string) => {
+    setUpdatingId(userId);
+    try {
+      await api<any>(`/admin/users/${userId}/role`, {
+        method: "PUT",
+        body: JSON.stringify({ role: newRole }),
+      });
+      setUsers((current) =>
+        current.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "ロールの変更に失敗しました");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  if (loading) return <div className="loading-state">読み込み中...</div>;
+  if (error) return <div className="error-message">{error}</div>;
+
+  return (
+    <div className="admin-users-view">
+      <h3>プラットフォームユーザー管理</h3>
+      <p className="subtitle">
+        登録ユーザーの一覧表示および権限（ロール）の変更を行うことができます。
+      </p>
+
+      <div className="table-responsive">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>アバター</th>
+              <th>ユーザーID</th>
+              <th>名前</th>
+              <th>メールアドレス</th>
+              <th>登録日</th>
+              <th>ロール権限</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td>
+                  <img
+                    src={u.avatarUrl || "./placeholder-avatar.svg"}
+                    alt={u.name}
+                    className="avatar-img"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "./placeholder-avatar.svg";
+                    }}
+                  />
+                </td>
+                <td>#{u.id}</td>
+                <td><strong>{u.name}</strong></td>
+                <td>{u.email}</td>
+                <td className="small-text text-nowrap">
+                  {new Date(u.createdAt).toLocaleDateString("ja-JP", {
+                    year: "numeric",
+                    month: "numeric",
+                    day: "numeric",
+                  })}
+                </td>
+                <td>
+                  <select
+                    value={u.role}
+                    disabled={updatingId === u.id}
+                    onChange={(e) => void changeRole(u.id, e.target.value)}
+                    className="admin-role-select"
+                  >
+                    <option value="user">一般ユーザー (user)</option>
+                    <option value="admin">管理者 (admin)</option>
+                  </select>
+                  {updatingId === u.id && <span className="updating-spinner">...</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

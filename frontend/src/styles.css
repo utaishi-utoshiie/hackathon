@@ -1008,3 +1008,280 @@ form {
     max-width: 88%;
   }
 }
+
+/* ==========================================
+   Admin Dashboard Styles
+   ========================================== */
+.admin-screen {
+  display: grid;
+  gap: 24px;
+}
+
+.admin-header {
+  border-bottom: 2px solid #eadfd3;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 16px;
+}
+
+.admin-subnav {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-subnav .tab-link {
+  align-items: center;
+  background: #fbf9f4;
+  border: 1px solid #eadfd3;
+  border-radius: 6px;
+  color: #5c6b73;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 10px 18px;
+  transition: all 0.2s ease;
+}
+
+.admin-subnav .tab-link:hover {
+  background-color: #eef2f5;
+}
+
+.admin-subnav .tab-link.active {
+  background-color: #d85b46;
+  color: #ffffff;
+  border-color: #d85b46;
+}
+
+.admin-content {
+  background: #ffffff;
+  border: 1px solid #eadfd3;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  padding: 24px;
+}
+
+/* Stats Cards */
+.stats-cards-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: 30px;
+}
+
+.stats-cards-grid .stat-card {
+  background: #fffdf9;
+  border: 1px solid #eadfd3;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 20px;
+}
+
+.stats-cards-grid .stat-card h3 {
+  color: #7d8b99;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.stats-cards-grid .stat-card .stat-number {
+  color: #1f2933;
+  font-size: 28px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.stats-cards-grid .stat-card .stat-number.primary {
+  color: #d85b46;
+}
+
+/* Charts List */
+.stats-charts-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stats-charts-grid .chart-container.full-width {
+  grid-column: span 2;
+}
+
+.chart-container {
+  background: #fffdf9;
+  border: 1px solid #eadfd3;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.chart-container h3 {
+  border-left: 4px solid #d85b46;
+  font-size: 16px;
+  margin: 0 0 20px;
+  padding-left: 10px;
+}
+
+.chart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.max-h-300 {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.chart-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chart-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.chart-bar-label small {
+  color: #5c6b73;
+}
+
+.chart-bar-bg {
+  background: #eef2f5;
+  border-radius: 4px;
+  height: 10px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.chart-bar-fill {
+  background: #d85b46;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+
+.chart-bar-fill.accent {
+  background: #47a8bd;
+}
+
+.chart-bar-fill.primary-fill {
+  background: #d85b46;
+}
+
+/* Admin Tables */
+.table-responsive {
+  margin-top: 16px;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.admin-table {
+  border-collapse: collapse;
+  font-size: 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.admin-table th,
+.admin-table td {
+  border-bottom: 1px solid #eadfd3;
+  padding: 12px 16px;
+}
+
+.admin-table th {
+  background-color: #fffdf9;
+  color: #1f2933;
+  font-weight: 700;
+}
+
+.admin-table tbody tr:hover {
+  background-color: #fbf9f4;
+}
+
+.avatar-img {
+  border-radius: 50%;
+  height: 36px;
+  object-fit: cover;
+  width: 36px;
+}
+
+.admin-role-select {
+  background: #ffffff;
+  border: 1px solid #eadfd3;
+  border-radius: 4px;
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+/* Badges */
+.risk-badge {
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.risk-badge.success {
+  background: #e1f8eb;
+  color: #1b8a5a;
+}
+
+.risk-badge.warning {
+  background: #fdf5e2;
+  color: #9d6f1a;
+}
+
+.risk-badge.danger {
+  background: #f9dfd8;
+  color: #9d372c;
+}
+
+.danger-text {
+  color: #9d372c;
+}
+
+.success-text {
+  color: #1b8a5a;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.keyword-tag {
+  background: #eef2f5;
+  border-radius: 3px;
+  color: #3b4b5c;
+  display: inline-block;
+  font-size: 11px;
+  margin: 2px;
+  padding: 2px 6px;
+}
+
+.reasons-list {
+  list-style: disc;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.reasons-cell {
+  max-width: 300px;
+}
+
+@media (max-width: 720px) {
+  .stats-charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-charts-grid .chart-container.full-width {
+    grid-column: span 1;
+  }
+}

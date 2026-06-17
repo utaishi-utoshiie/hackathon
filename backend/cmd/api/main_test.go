@@ -214,3 +214,77 @@ func TestLocalUploadURLSignsVerifiableToken(t *testing.T) {
 		t.Fatalf("unexpected claim: %+v", claim)
 	}
 }
+
+func TestSplitClean(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		sep  string
+		want []string
+	}{
+		{name: "empty", in: "", sep: ",", want: []string{}},
+		{name: "simple", in: "a,b,c", sep: ",", want: []string{"a", "b", "c"}},
+		{name: "with spaces", in: " a ,  b , c ", sep: ",", want: []string{"a", "b", "c"}},
+		{name: "with empty parts", in: "a,,b,", sep: ",", want: []string{"a", "b"}},
+		{name: "with newlines", in: "a\nb\n", sep: "\n", want: []string{"a", "b"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := splitClean(tt.in, tt.sep)
+			if len(got) != len(tt.want) {
+				t.Fatalf("splitClean(%q) returned %d items, want %d", tt.in, len(got), len(tt.want))
+			}
+			for i, v := range got {
+				if v != tt.want[i] {
+					t.Fatalf("splitClean(%q)[%d] = %q, want %q", tt.in, i, v, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestRequireAdminMiddleware(t *testing.T) {
+	a := &app{jwtSecret: "test-secret"}
+
+	handler := a.requireAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+
+	// Case 1: Unauthorized (no token)
+	{
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/stats", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rec.Code)
+		}
+	}
+
+	// Case 2: Forbidden (non-admin token)
+	{
+		token := a.signToken(user{ID: 1, Name: "User", Email: "user@example.com", Role: "user"})
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/stats", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", rec.Code)
+		}
+	}
+
+	// Case 3: Success (admin token)
+	{
+		token := a.signToken(user{ID: 2, Name: "Admin", Email: "admin@example.com", Role: "admin"})
+		req := httptest.NewRequest(http.MethodGet, "/api/admin/stats", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if got := rec.Body.String(); got != "ok" {
+			t.Fatalf("expected 'ok', got %q", got)
+		}
+	}
+}
