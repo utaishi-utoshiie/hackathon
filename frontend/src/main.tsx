@@ -626,6 +626,16 @@ function HomeScreen({
   );
 }
 
+const CATEGORIES = [
+  { value: "fashion", label: "👕 ファッション" },
+  { value: "electronics", label: "💻 家電・スマホ" },
+  { value: "books", label: "📚 本・エンタメ" },
+  { value: "toys", label: "🧸 おもちゃ・ホビー" },
+  { value: "home", label: "🏡 生活・住まい" },
+  { value: "sports", label: "⚽ スポーツ" },
+  { value: "other", label: "🏷️ その他" }
+];
+
 function CreateItemScreen({
   api,
   onCreated
@@ -772,10 +782,41 @@ function CreateItemScreen({
         </div>
         <form onSubmit={submit}>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="商品名" />
-          <div className="two-col">
-            <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="カテゴリ" />
-            <input value={price} onChange={(e) => setPrice(Number(e.target.value))} type="number" placeholder="価格" />
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", margin: "8px 0 16px 0", background: "#fffdf9", border: "1px solid #eadfd3", padding: "16px", borderRadius: "8px" }}>
+            <small style={{ color: "#7d8b99", fontWeight: 700, fontSize: "12px", textTransform: "uppercase" }}>カテゴリー（ジャンル）を選択</small>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {CATEGORIES.map((cat) => {
+                const isActive = category === cat.value;
+                return (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setCategory(cat.value)}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: "20px",
+                      border: "1px solid #eadfd3",
+                      background: isActive ? "#d85b46" : "#ffffff",
+                      color: isActive ? "#ffffff" : "#1f2933",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          <div className="two-col">
+            <input value={price} onChange={(e) => setPrice(Number(e.target.value))} type="number" placeholder="価格" style={{ width: "100%" }} />
+            <input value={condition} onChange={(e) => setCondition(e.target.value)} placeholder="状態" style={{ width: "100%" }} />
+          </div>
+
           <div className="two-col">
             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <small style={{ color: "#7d8b99", fontWeight: 600 }}>最低売却許容価格 (非公開)</small>
@@ -791,7 +832,6 @@ function CreateItemScreen({
               </select>
             </div>
           </div>
-          <input value={condition} onChange={(e) => setCondition(e.target.value)} placeholder="状態" />
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="AIに渡すメモ" />
           <div className="tool-row">
             <button className="ai-button" disabled={loadingAI} type="button" onClick={generateDescription}>
