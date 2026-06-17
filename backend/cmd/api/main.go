@@ -1421,7 +1421,7 @@ func (a *app) callOpenAIImageEdit(ctx context.Context, prompt string, images []i
 	_ = writer.WriteField("size", "1536x1024")
 	_ = writer.WriteField("output_format", "jpeg")
 	for _, image := range images {
-		part, err := writer.CreateFormFile("image", image.Filename)
+		part, err := writer.CreateFormFile("image[]", image.Filename)
 		if err != nil {
 			return nil, err
 		}

@@ -48,6 +48,48 @@ func TestCallOpenAIJSONParsesChatCompletionContent(t *testing.T) {
 	}
 }
 
+func TestCallOpenAIImageEditUsesArrayImageFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/edits" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Fatalf("unexpected authorization header: %q", got)
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("parse multipart form: %v", err)
+		}
+		if got := r.MultipartForm.Value["model"]; len(got) != 1 || got[0] != "gpt-image-1.5" {
+			t.Fatalf("unexpected model field: %+v", got)
+		}
+		if got := r.MultipartForm.File["image"]; len(got) != 0 {
+			t.Fatalf("unexpected duplicate image field: %+v", got)
+		}
+		if got := r.MultipartForm.File["image[]"]; len(got) != 2 {
+			t.Fatalf("image[] files = %d, want 2", len(got))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"b64_json":"aGk="}]}`))
+	}))
+	defer server.Close()
+
+	a := &app{
+		openAIKey:     "test-key",
+		openAIBaseURL: server.URL,
+		httpClient:    server.Client(),
+	}
+	got, err := a.callOpenAIImageEdit(context.Background(), "合成して", []imageUpload{
+		{Filename: "profile.jpg", Bytes: []byte("profile")},
+		{Filename: "item.jpg", Bytes: []byte("item")},
+	})
+	if err != nil {
+		t.Fatalf("callOpenAIImageEdit returned error: %v", err)
+	}
+	if string(got) != "hi" {
+		t.Fatalf("decoded image = %q, want hi", string(got))
+	}
+}
+
 func TestExtractJSONObjectFromFencedText(t *testing.T) {
 	got := extractJSONObject("```json\n{\"price\":1200}\n```")
 	if got != `{"price":1200}` {
