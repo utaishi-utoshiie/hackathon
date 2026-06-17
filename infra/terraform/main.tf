@@ -6,7 +6,6 @@ locals {
   image              = "${var.region}-docker.pkg.dev/${var.project_id}/${local.repository_id}/${var.app_name}:${var.image_tag}"
   jwt_secret         = var.jwt_secret != "" ? var.jwt_secret : random_password.jwt_secret.result
   openai_secret_id   = "${var.app_name}-openai-api-key"
-  cloud_build_sa     = "${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
   github_connection  = "projects/${var.project_id}/locations/${var.github_connection_region}/connections/${var.github_connection_name}"
 }
 
@@ -161,6 +160,13 @@ resource "google_service_account" "cloud_run" {
   depends_on = [google_project_service.services]
 }
 
+resource "google_service_account" "cloud_build" {
+  account_id   = "${var.app_name}-build"
+  display_name = "Cloud Build deployer for ${var.app_name}"
+
+  depends_on = [google_project_service.services]
+}
+
 resource "google_project_iam_member" "cloud_run_sql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
@@ -200,20 +206,26 @@ resource "google_storage_bucket_iam_member" "cloud_run_upload_object_creator" {
 resource "google_project_iam_member" "cloud_build_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
-  member  = "serviceAccount:${local.cloud_build_sa}"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
 resource "google_service_account_iam_member" "cloud_build_service_account_user" {
   service_account_id = google_service_account.cloud_run.name
   role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${local.cloud_build_sa}"
+  member             = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
 resource "google_artifact_registry_repository_iam_member" "cloud_build_artifact_writer" {
   location   = google_artifact_registry_repository.app.location
   repository = google_artifact_registry_repository.app.repository_id
   role       = "roles/artifactregistry.writer"
-  member     = "serviceAccount:${local.cloud_build_sa}"
+  member     = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+resource "google_project_iam_member" "cloud_build_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
 resource "google_cloud_run_v2_service" "app" {
@@ -363,7 +375,7 @@ resource "google_cloudbuild_trigger" "github_main" {
   description     = "Build and deploy ${var.github_owner}/${var.github_repository} main branch to Cloud Run"
   filename        = "cloudbuild.yaml"
   location        = var.github_connection_region
-  service_account = "projects/${var.project_id}/serviceAccounts/${local.cloud_build_sa}"
+  service_account = google_service_account.cloud_build.id
 
   repository_event_config {
     repository = google_cloudbuildv2_repository.github[0].id
@@ -383,6 +395,7 @@ resource "google_cloudbuild_trigger" "github_main" {
   depends_on = [
     google_artifact_registry_repository.app,
     google_project_iam_member.cloud_build_run_admin,
+    google_project_iam_member.cloud_build_log_writer,
     google_service_account_iam_member.cloud_build_service_account_user,
     google_artifact_registry_repository_iam_member.cloud_build_artifact_writer,
     google_cloudbuildv2_repository.github,
