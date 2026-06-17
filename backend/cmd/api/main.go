@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -25,6 +26,7 @@ import (
 
 type app struct {
 	db            *sql.DB
+	dbMu          sync.RWMutex
 	jwtSecret     string
 	geminiKey     string
 	geminiModel   string
@@ -73,35 +75,13 @@ type authUserKey struct{}
 
 func main() {
 	_ = godotenv.Load()
-	dsn, err := resolveDSN()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Fatal(err)
-	}
-	db.SetMaxOpenConns(12)
-	db.SetMaxIdleConns(6)
-	db.SetConnMaxLifetime(30 * time.Minute)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
-		log.Fatal(err)
-	}
-	if err := migrate(ctx, db); err != nil {
-		log.Fatal(err)
-	}
-
 	a := &app{
-		db:            db,
 		jwtSecret:     env("JWT_SECRET", "dev-secret"),
 		geminiKey:     os.Getenv("GEMINI_API_KEY"),
 		geminiModel:   env("GEMINI_MODEL", "gemini-2.5-flash"),
 		allowedOrigin: env("ALLOWED_ORIGIN", "http://localhost:5173"),
 	}
+	go a.initDBLoop()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/healthz", a.health)
@@ -121,7 +101,7 @@ func main() {
 
 	port := env("PORT", "8080")
 	log.Printf("backend listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, a.cors(withFrontend(mux))))
+	log.Fatal(http.ListenAndServe(":"+port, a.cors(withFrontend(a.guardDB(mux)))))
 }
 
 func (a *app) cors(next http.Handler) http.Handler {
@@ -179,6 +159,70 @@ func findFrontendDir() (string, bool) {
 	return "", false
 }
 
+func (a *app) guardDB(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/api/healthz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if a.dbHandle() == nil {
+			writeError(w, http.StatusServiceUnavailable, "database is starting")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *app) initDBLoop() {
+	for {
+		dsn, err := resolveDSN()
+		if err != nil {
+			log.Printf("database init pending: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		db, err := sql.Open("mysql", dsn)
+		if err != nil {
+			log.Printf("database open failed: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		db.SetMaxOpenConns(12)
+		db.SetMaxIdleConns(6)
+		db.SetConnMaxLifetime(30 * time.Minute)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err = db.PingContext(ctx)
+		if err == nil {
+			err = migrate(ctx, db)
+		}
+		cancel()
+		if err != nil {
+			log.Printf("database init failed: %v", err)
+			_ = db.Close()
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		a.setDB(db)
+		log.Printf("database connected")
+		return
+	}
+}
+
+func (a *app) dbHandle() *sql.DB {
+	a.dbMu.RLock()
+	defer a.dbMu.RUnlock()
+	return a.db
+}
+
+func (a *app) setDB(db *sql.DB) {
+	a.dbMu.Lock()
+	defer a.dbMu.Unlock()
+	a.db = db
+}
+
 func resolveDSN() (string, error) {
 	if dsn := os.Getenv("DATABASE_DSN"); dsn != "" {
 		return dsn, nil
@@ -225,7 +269,12 @@ func (a *app) isAllowedOrigin(origin string) bool {
 }
 
 func (a *app) health(w http.ResponseWriter, r *http.Request) {
-	if err := a.db.PingContext(r.Context()); err != nil {
+	db := a.dbHandle()
+	if db == nil {
+		writeError(w, http.StatusServiceUnavailable, "database unavailable")
+		return
+	}
+	if err := db.PingContext(r.Context()); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "database unavailable")
 		return
 	}
@@ -246,7 +295,7 @@ func (a *app) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := a.db.ExecContext(r.Context(),
+	res, err := a.dbHandle().ExecContext(r.Context(),
 		"INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'user')",
 		req.Name, strings.ToLower(req.Email), a.hashPassword(req.Password),
 	)
@@ -271,7 +320,7 @@ func (a *app) login(w http.ResponseWriter, r *http.Request) {
 
 	var u user
 	var passwordHash string
-	err := a.db.QueryRowContext(r.Context(),
+	err := a.dbHandle().QueryRowContext(r.Context(),
 		"SELECT id, name, email, role, password_hash FROM users WHERE email = ?",
 		strings.ToLower(req.Email),
 	).Scan(&u.ID, &u.Name, &u.Email, &u.Role, &passwordHash)
@@ -284,7 +333,7 @@ func (a *app) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) listItems(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `
+	rows, err := a.dbHandle().QueryContext(r.Context(), `
 		SELECT i.id, i.seller_id, u.name, i.title, i.description, i.category, i.price, i.status,
 		       COALESCE((SELECT image_url FROM item_images WHERE item_id = i.id ORDER BY sort_order LIMIT 1), ''),
 		       COUNT(l.item_id), i.created_at
@@ -347,7 +396,7 @@ func (a *app) createItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := a.db.BeginTx(r.Context(), nil)
+	tx, err := a.dbHandle().BeginTx(r.Context(), nil)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to start transaction")
 		return
@@ -386,7 +435,7 @@ func (a *app) toggleLike(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var exists int
-	err := a.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM likes WHERE user_id = ? AND item_id = ?", u.ID, itemID).Scan(&exists)
+	err := a.dbHandle().QueryRowContext(r.Context(), "SELECT COUNT(*) FROM likes WHERE user_id = ? AND item_id = ?", u.ID, itemID).Scan(&exists)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to check like")
 		return
@@ -394,9 +443,9 @@ func (a *app) toggleLike(w http.ResponseWriter, r *http.Request) {
 
 	liked := exists == 0
 	if liked {
-		_, err = a.db.ExecContext(r.Context(), "INSERT INTO likes (user_id, item_id) VALUES (?, ?)", u.ID, itemID)
+		_, err = a.dbHandle().ExecContext(r.Context(), "INSERT INTO likes (user_id, item_id) VALUES (?, ?)", u.ID, itemID)
 	} else {
-		_, err = a.db.ExecContext(r.Context(), "DELETE FROM likes WHERE user_id = ? AND item_id = ?", u.ID, itemID)
+		_, err = a.dbHandle().ExecContext(r.Context(), "DELETE FROM likes WHERE user_id = ? AND item_id = ?", u.ID, itemID)
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update like")
@@ -404,7 +453,7 @@ func (a *app) toggleLike(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var count int
-	_ = a.db.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM likes WHERE item_id = ?", itemID).Scan(&count)
+	_ = a.dbHandle().QueryRowContext(r.Context(), "SELECT COUNT(*) FROM likes WHERE item_id = ?", itemID).Scan(&count)
 	writeJSON(w, http.StatusOK, map[string]any{"liked": liked, "likeCount": count})
 }
 
@@ -415,7 +464,7 @@ func (a *app) purchaseItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := a.db.BeginTx(r.Context(), nil)
+	tx, err := a.dbHandle().BeginTx(r.Context(), nil)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to start transaction")
 		return
@@ -473,7 +522,7 @@ func (a *app) createConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := a.db.ExecContext(r.Context(),
+	_, err := a.dbHandle().ExecContext(r.Context(),
 		"INSERT IGNORE INTO conversations (item_id, buyer_id, seller_id) VALUES (?, ?, ?)",
 		req.ItemID, u.ID, req.SellerID,
 	)
@@ -483,7 +532,7 @@ func (a *app) createConversation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id int64
-	err = a.db.QueryRowContext(r.Context(),
+	err = a.dbHandle().QueryRowContext(r.Context(),
 		"SELECT id FROM conversations WHERE item_id = ? AND buyer_id = ? AND seller_id = ?",
 		req.ItemID, u.ID, req.SellerID,
 	).Scan(&id)
@@ -496,7 +545,7 @@ func (a *app) createConversation(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) listConversations(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
-	rows, err := a.db.QueryContext(r.Context(), `
+	rows, err := a.dbHandle().QueryContext(r.Context(), `
 		SELECT c.id, c.item_id, i.title, c.buyer_id, c.seller_id, c.updated_at
 		FROM conversations c
 		JOIN items i ON i.id = c.item_id
@@ -525,7 +574,7 @@ func (a *app) listMessages(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := a.db.QueryContext(r.Context(),
+	rows, err := a.dbHandle().QueryContext(r.Context(),
 		"SELECT id, conversation_id, sender_id, body, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
 		conversationID,
 	)
@@ -564,7 +613,7 @@ func (a *app) createMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := a.db.ExecContext(r.Context(),
+	res, err := a.dbHandle().ExecContext(r.Context(),
 		"INSERT INTO messages (conversation_id, sender_id, body) VALUES (?, ?, ?)",
 		conversationID, u.ID, req.Body,
 	)
@@ -572,7 +621,7 @@ func (a *app) createMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create message")
 		return
 	}
-	_, _ = a.db.ExecContext(r.Context(), "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", conversationID)
+	_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", conversationID)
 	id, _ := res.LastInsertId()
 	writeJSON(w, http.StatusCreated, map[string]any{"messageId": id})
 }
@@ -624,7 +673,7 @@ func (a *app) askAI(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) findItem(ctx context.Context, id int64) (item, error) {
 	var it item
-	err := a.db.QueryRowContext(ctx, `
+	err := a.dbHandle().QueryRowContext(ctx, `
 		SELECT i.id, i.seller_id, u.name, i.title, i.description, i.category, i.price, i.status,
 		       COALESCE((SELECT image_url FROM item_images WHERE item_id = i.id ORDER BY sort_order LIMIT 1), ''),
 		       (SELECT COUNT(*) FROM likes WHERE item_id = i.id), i.created_at
@@ -636,7 +685,7 @@ func (a *app) findItem(ctx context.Context, id int64) (item, error) {
 }
 
 func (a *app) saveAI(ctx context.Context, userID int64, itemID *int64, kind string, prompt string, result string) {
-	_, _ = a.db.ExecContext(ctx,
+	_, _ = a.dbHandle().ExecContext(ctx,
 		"INSERT INTO ai_generations (user_id, item_id, kind, prompt, result) VALUES (?, ?, ?, ?, ?)",
 		userID, itemID, kind, prompt, result,
 	)
