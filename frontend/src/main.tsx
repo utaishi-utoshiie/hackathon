@@ -351,19 +351,26 @@ function App() {
           )}
 
           {route.page === "item" && (
-            <ItemDetailScreen
-              item={selectedItem}
-              user={user}
-              api={api}
-              onBack={() => navigate({ page: "home" })}
-              onChanged={(itemId) => void refreshItemsAndKeepSelection(itemId)}
-              onNotice={setNotice}
-              onConversationCreated={async (conversationId) => {
-                await loadConversations();
-                await loadMessages(conversationId);
-                navigate({ page: "messages" });
-              }}
-            />
+            itemsLoading ? (
+              <div className="loading-state" style={{ padding: "100px 40px", textAlign: "center", fontSize: "16px", color: "#7d8b99" }}>
+                <div className="updating-spinner" style={{ fontSize: "28px", marginBottom: "12px" }}>🤖 📦 🤖</div>
+                商品詳細データを読み込み中...
+              </div>
+            ) : (
+              <ItemDetailScreen
+                item={selectedItem}
+                user={user}
+                api={api}
+                onBack={() => navigate({ page: "home" })}
+                onChanged={(itemId) => void refreshItemsAndKeepSelection(itemId)}
+                onNotice={setNotice}
+                onConversationCreated={async (conversationId) => {
+                  await loadConversations();
+                  await loadMessages(conversationId);
+                  navigate({ page: "messages" });
+                }}
+              />
+            )
           )}
 
           {route.page === "messages" && (
@@ -985,6 +992,13 @@ function ItemDetailScreen({
     }
   }, [showNegotiation]);
 
+  useEffect(() => {
+    setScene(null);
+    setSceneError("");
+    if (!user || !item) return;
+    void loadLatestScene();
+  }, [item?.id, user?.id]);
+
   if (!item) {
     return (
       <section className="page-shell">
@@ -999,13 +1013,6 @@ function ItemDetailScreen({
   }
 
   const currentItem = item;
-
-  useEffect(() => {
-    setScene(null);
-    setSceneError("");
-    if (!user) return;
-    void loadLatestScene();
-  }, [currentItem.id, user?.id]);
 
   async function loadLatestScene() {
     try {
