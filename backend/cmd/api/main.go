@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,6 +38,8 @@ type app struct {
 	jwtSecret     string
 	openAIKey     string
 	openAIModel   string
+	openAIBaseURL string
+	httpClient    *http.Client
 	allowedOrigin string
 }
 
@@ -78,6 +81,21 @@ type message struct {
 	CreatedAt      time.Time `json:"createdAt"`
 }
 
+type itemReview struct {
+	Prohibited      bool     `json:"prohibited"`
+	RiskLevel       string   `json:"riskLevel"`
+	Reasons         []string `json:"reasons"`
+	BlockedKeywords []string `json:"blockedKeywords"`
+}
+
+type priceSuggestion struct {
+	Price    int      `json:"price"`
+	MinPrice int      `json:"minPrice"`
+	MaxPrice int      `json:"maxPrice"`
+	Reason   string   `json:"reason"`
+	Signals  []string `json:"signals"`
+}
+
 type authUserKey struct{}
 
 func main() {
@@ -86,6 +104,8 @@ func main() {
 		jwtSecret:     env("JWT_SECRET", "dev-secret"),
 		openAIKey:     strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
 		openAIModel:   env("OPENAI_MODEL", "gpt-4o-mini"),
+		openAIBaseURL: env("OPENAI_BASE_URL", "https://api.openai.com"),
+		httpClient:    http.DefaultClient,
 		allowedOrigin: env("ALLOWED_ORIGIN", "http://localhost:5173"),
 	}
 	go a.initDBLoop()
@@ -106,6 +126,8 @@ func main() {
 	mux.HandleFunc("POST /api/conversations/{id}/messages", a.requireAuth(a.createMessage))
 	mux.HandleFunc("POST /api/ai/generate-description", a.requireAuth(a.generateDescription))
 	mux.HandleFunc("POST /api/ai/ask", a.requireAuth(a.askAI))
+	mux.HandleFunc("POST /api/ai/check-item", a.requireAuth(a.checkItem))
+	mux.HandleFunc("POST /api/ai/suggest-price", a.requireAuth(a.suggestPrice))
 
 	port := env("PORT", "8080")
 	log.Printf("backend listening on :%s", port)
@@ -466,6 +488,15 @@ func (a *app) createItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "title, description, category, and positive price are required")
 		return
 	}
+	review, err := a.reviewItem(r.Context(), req.Title, req.Description, req.Category, "")
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if review.Prohibited {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "出品禁止物の可能性があるため出品できません", "review": review})
+		return
+	}
 
 	tx, err := a.dbHandle().BeginTx(r.Context(), nil)
 	if err != nil {
@@ -488,6 +519,10 @@ func (a *app) createItem(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to save image")
 			return
 		}
+	}
+	if err := saveItemReview(r.Context(), tx, itemID, u.ID, review); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save item review")
+		return
 	}
 	if err := tx.Commit(); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to commit item")
@@ -718,6 +753,31 @@ func (a *app) generateDescription(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"description": text})
 }
 
+func (a *app) checkItem(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	var req struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Category    string `json:"category"`
+		Condition   string `json:"condition"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Title) == "" || strings.TrimSpace(req.Description) == "" {
+		writeError(w, http.StatusBadRequest, "title and description are required")
+		return
+	}
+	prompt := itemReviewPrompt(req.Title, req.Description, req.Category, req.Condition)
+	review, err := a.reviewItemWithPrompt(r.Context(), prompt)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	a.saveAI(r.Context(), u.ID, nil, "item_check", prompt, mustJSON(review))
+	writeJSON(w, http.StatusOK, map[string]any{"review": review})
+}
+
 func (a *app) askAI(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	var req struct {
@@ -742,6 +802,38 @@ func (a *app) askAI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"answer": text})
 }
 
+func (a *app) suggestPrice(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	var req struct {
+		Title     string `json:"title"`
+		Category  string `json:"category"`
+		Condition string `json:"condition"`
+		Notes     string `json:"notes"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Title) == "" || strings.TrimSpace(req.Category) == "" {
+		writeError(w, http.StatusBadRequest, "title and category are required")
+		return
+	}
+	prompt := priceSuggestionPrompt(req.Title, req.Category, req.Condition, req.Notes)
+	var suggestion priceSuggestion
+	if err := a.callOpenAIJSON(r.Context(), prompt, &suggestion); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	suggestion.Price = clampPrice(suggestion.Price)
+	if suggestion.MinPrice <= 0 || suggestion.MinPrice > suggestion.Price {
+		suggestion.MinPrice = clampPrice(suggestion.Price * 8 / 10)
+	}
+	if suggestion.MaxPrice < suggestion.Price {
+		suggestion.MaxPrice = clampPrice(suggestion.Price * 12 / 10)
+	}
+	a.saveAI(r.Context(), u.ID, nil, "price_suggestion", prompt, mustJSON(suggestion))
+	writeJSON(w, http.StatusOK, map[string]any{"suggestion": suggestion})
+}
+
 func (a *app) findItem(ctx context.Context, id int64) (item, error) {
 	var it item
 	err := a.dbHandle().QueryRowContext(ctx, `
@@ -755,6 +847,21 @@ func (a *app) findItem(ctx context.Context, id int64) (item, error) {
 	return it, err
 }
 
+func (a *app) reviewItem(ctx context.Context, title string, description string, category string, condition string) (itemReview, error) {
+	return a.reviewItemWithPrompt(ctx, itemReviewPrompt(title, description, category, condition))
+}
+
+func (a *app) reviewItemWithPrompt(ctx context.Context, prompt string) (itemReview, error) {
+	var review itemReview
+	if err := a.callOpenAIJSON(ctx, prompt, &review); err != nil {
+		return itemReview{}, err
+	}
+	review.RiskLevel = normalizeRiskLevel(review.RiskLevel, review.Prohibited)
+	review.Reasons = cleanStrings(review.Reasons)
+	review.BlockedKeywords = cleanStrings(review.BlockedKeywords)
+	return review, nil
+}
+
 func (a *app) saveAI(ctx context.Context, userID int64, itemID *int64, kind string, prompt string, result string) {
 	_, _ = a.dbHandle().ExecContext(ctx,
 		"INSERT INTO ai_generations (user_id, item_id, kind, prompt, result) VALUES (?, ?, ?, ?, ?)",
@@ -762,7 +869,27 @@ func (a *app) saveAI(ctx context.Context, userID int64, itemID *int64, kind stri
 	)
 }
 
+func saveItemReview(ctx context.Context, tx *sql.Tx, itemID int64, userID int64, review itemReview) error {
+	_, err := tx.ExecContext(ctx,
+		"INSERT INTO item_moderations (item_id, user_id, prohibited, risk_level, reasons, blocked_keywords) VALUES (?, ?, ?, ?, ?, ?)",
+		itemID, userID, review.Prohibited, review.RiskLevel, strings.Join(review.Reasons, "\n"), strings.Join(review.BlockedKeywords, ","),
+	)
+	return err
+}
+
 func (a *app) callOpenAI(ctx context.Context, prompt string) (string, error) {
+	return a.callOpenAIWithFormat(ctx, prompt, nil)
+}
+
+func (a *app) callOpenAIJSON(ctx context.Context, prompt string, dst any) error {
+	text, err := a.callOpenAIWithFormat(ctx, prompt, map[string]string{"type": "json_object"})
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal([]byte(extractJSONObject(text)), dst)
+}
+
+func (a *app) callOpenAIWithFormat(ctx context.Context, prompt string, responseFormat any) (string, error) {
 	if a.openAIKey == "" {
 		return "", errors.New("OPENAI_API_KEY is not set")
 	}
@@ -773,15 +900,26 @@ func (a *app) callOpenAI(ctx context.Context, prompt string) (string, error) {
 		},
 		"temperature": 0.4,
 	}
+	if responseFormat != nil {
+		body["response_format"] = responseFormat
+	}
 	payload, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/chat/completions", bytes.NewReader(payload))
+	endpoint, err := url.JoinPath(a.openAIBaseURL, "/v1/chat/completions")
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.openAIKey)
 
-	res, err := http.DefaultClient.Do(req)
+	client := a.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	res, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -805,6 +943,79 @@ func (a *app) callOpenAI(ctx context.Context, prompt string) (string, error) {
 		return "", errors.New("openai returned empty response")
 	}
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+}
+
+func itemReviewPrompt(title string, description string, category string, condition string) string {
+	return fmt.Sprintf(`あなたは日本のフリマアプリの安全審査AIです。出品禁止物の可能性を審査してください。
+禁止対象例: 刃物、医薬品、処方薬、危険物、武器、偽ブランド、盗品、個人情報、成人向け商品、チケット転売、法令や規約に反するもの。
+必ずJSONだけで返してください。形式: {"prohibited":true|false,"riskLevel":"low|medium|high","reasons":["理由"],"blockedKeywords":["検出語"]}
+商品名: %s
+カテゴリ: %s
+状態: %s
+説明: %s`, title, category, condition, description)
+}
+
+func priceSuggestionPrompt(title string, category string, condition string, notes string) string {
+	return fmt.Sprintf(`あなたはフリマアプリの価格アドバイザーです。日本円で現実的な出品価格を提案してください。
+必ずJSONだけで返してください。形式: {"price":整数,"minPrice":整数,"maxPrice":整数,"reason":"短い理由","signals":["判断材料"]}
+商品名: %s
+カテゴリ: %s
+状態: %s
+メモ: %s`, title, category, condition, notes)
+}
+
+func normalizeRiskLevel(value string, prohibited bool) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "low", "medium", "high":
+		return value
+	}
+	if prohibited {
+		return "high"
+	}
+	return "low"
+}
+
+func cleanStrings(values []string) []string {
+	cleaned := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		cleaned = append(cleaned, value)
+	}
+	return cleaned
+}
+
+func clampPrice(value int) int {
+	if value < 300 {
+		return 300
+	}
+	if value > 9999999 {
+		return 9999999
+	}
+	return value
+}
+
+func extractJSONObject(text string) string {
+	text = strings.TrimSpace(text)
+	if json.Valid([]byte(text)) {
+		return text
+	}
+	re := regexp.MustCompile(`(?s)\{.*\}`)
+	match := re.FindString(text)
+	if match == "" {
+		return text
+	}
+	return match
+}
+
+func mustJSON(v any) string {
+	data, _ := json.Marshal(v)
+	return string(data)
 }
 
 func (a *app) requireAuth(next http.HandlerFunc) http.HandlerFunc {

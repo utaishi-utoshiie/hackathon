@@ -664,6 +664,42 @@ form {
   padding: 16px;
 }
 
+.tool-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ai-result {
+  background: #fffcf8;
+  border: 1px solid #eadfd3;
+  border-left: 4px solid #b78f5d;
+  border-radius: 16px;
+  color: #2f3c34;
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+}
+
+.ai-result strong,
+.ai-result p {
+  margin: 0;
+}
+
+.ai-result small {
+  color: #6c766f;
+}
+
+.ai-result.safe {
+  border-left-color: #3c8f69;
+}
+
+.ai-result.danger {
+  background: #fff2ec;
+  border-color: #efc7bb;
+  border-left-color: #d85b46;
+}
+
 .preview-body {
   min-height: 24px;
 }

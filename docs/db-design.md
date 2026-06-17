@@ -90,6 +90,19 @@
 | result | TEXT | OpenAI response |
 | created_at | DATETIME | Created time |
 
+### item_moderations
+
+| Column | Type | Note |
+| --- | --- | --- |
+| id | BIGINT | Primary key |
+| item_id | BIGINT | FK items.id |
+| user_id | BIGINT | FK users.id |
+| prohibited | BOOLEAN | Whether listing was considered prohibited |
+| risk_level | VARCHAR(20) | low/medium/high |
+| reasons | TEXT | Review reasons |
+| blocked_keywords | TEXT | Detected risky terms |
+| created_at | DATETIME | Created time |
+
 ## Indexes
 
 - `users.email` unique index
@@ -102,3 +115,6 @@
 - `conversations.seller_id`
 - `messages.conversation_id, created_at`
 - `ai_generations.user_id, created_at`
+- `item_moderations.item_id, created_at`
+- `item_moderations.user_id, created_at`
+- `item_moderations.risk_level`

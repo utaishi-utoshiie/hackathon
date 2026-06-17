@@ -11,6 +11,7 @@ import {
   PackagePlus,
   Search,
   Send,
+  ShieldAlert,
   ShoppingBag,
   Sparkles,
   Store,
@@ -58,6 +59,21 @@ type Message = {
   senderId: number;
   body: string;
   createdAt: string;
+};
+
+type ItemReview = {
+  prohibited: boolean;
+  riskLevel: "low" | "medium" | "high";
+  reasons: string[];
+  blockedKeywords: string[];
+};
+
+type PriceSuggestion = {
+  price: number;
+  minPrice: number;
+  maxPrice: number;
+  reason: string;
+  signals: string[];
 };
 
 type Route =
@@ -569,10 +585,18 @@ function CreateItemScreen({
   const [price, setPrice] = useState(4800);
   const [imageUrl, setImageUrl] = useState("https://images.unsplash.com/photo-1594223274512-ad4803739b7c?auto=format&fit=crop&w=900&q=80");
   const [loadingAI, setLoadingAI] = useState(false);
+  const [loadingPrice, setLoadingPrice] = useState(false);
+  const [checkingItem, setCheckingItem] = useState(false);
   const [aiError, setAIError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [review, setReview] = useState<ItemReview | null>(null);
+  const [priceSuggestion, setPriceSuggestion] = useState<PriceSuggestion | null>(null);
+
+  useEffect(() => {
+    setReview(null);
+  }, [title, description, category, condition]);
 
   async function generateDescription() {
     setLoadingAI(true);
@@ -593,9 +617,47 @@ function CreateItemScreen({
     }
   }
 
+  async function suggestPrice() {
+    setLoadingPrice(true);
+    setAIError("");
+    setPriceSuggestion(null);
+    try {
+      const data = await api<{ suggestion: PriceSuggestion }>("/ai/suggest-price", {
+        method: "POST",
+        body: JSON.stringify({ title, category, condition, notes })
+      });
+      setPriceSuggestion(data.suggestion);
+      setPrice(data.suggestion.price);
+    } catch (err) {
+      setAIError(err instanceof Error ? err.message : "価格提案に失敗しました");
+    } finally {
+      setLoadingPrice(false);
+    }
+  }
+
+  async function checkItem() {
+    setCheckingItem(true);
+    setAIError("");
+    try {
+      const data = await api<{ review: ItemReview }>("/ai/check-item", {
+        method: "POST",
+        body: JSON.stringify({ title, description, category, condition })
+      });
+      setReview(data.review);
+      return data.review;
+    } catch (err) {
+      setAIError(err instanceof Error ? err.message : "出品チェックに失敗しました");
+      return null;
+    } finally {
+      setCheckingItem(false);
+    }
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitError("");
+    const latestReview = await checkItem();
+    if (!latestReview || latestReview.prohibited) return;
     try {
       const data = await api<{ item: Item }>("/items", {
         method: "POST",
@@ -657,10 +719,25 @@ function CreateItemScreen({
           </div>
           <input value={condition} onChange={(e) => setCondition(e.target.value)} placeholder="状態" />
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="AIに渡すメモ" />
-          <button className="ai-button" disabled={loadingAI} type="button" onClick={generateDescription}>
-            <Sparkles size={18} />
-            {loadingAI ? "生成中" : "OpenAIで説明生成"}
-          </button>
+          <div className="tool-row">
+            <button className="ai-button" disabled={loadingAI} type="button" onClick={generateDescription}>
+              <Sparkles size={18} />
+              {loadingAI ? "生成中" : "OpenAIで説明生成"}
+            </button>
+            <button className="ai-button" disabled={loadingPrice} type="button" onClick={suggestPrice}>
+              <Sparkles size={18} />
+              {loadingPrice ? "提案中" : "価格を提案"}
+            </button>
+          </div>
+          {priceSuggestion && (
+            <section className="ai-result">
+              <strong>推奨価格: ¥{priceSuggestion.price.toLocaleString()}</strong>
+              <p>{priceSuggestion.reason}</p>
+              <small>
+                目安: ¥{priceSuggestion.minPrice.toLocaleString()} - ¥{priceSuggestion.maxPrice.toLocaleString()}
+              </small>
+            </section>
+          )}
           {aiError && <p className="error">{aiError}</p>}
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="商品説明" />
           {description && (
@@ -681,10 +758,21 @@ function CreateItemScreen({
               <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="画像URL" />
             </div>
           )}
+          <button className="ghost-button" disabled={checkingItem || !description} type="button" onClick={() => void checkItem()}>
+            <ShieldAlert size={18} />
+            {checkingItem ? "確認中" : "出品前チェック"}
+          </button>
+          {review && (
+            <section className={review.prohibited ? "ai-result danger" : "ai-result safe"}>
+              <strong>{review.prohibited ? "出品できない可能性があります" : "出品チェックOK"}</strong>
+              <p>{review.reasons.length > 0 ? review.reasons.join(" / ") : "重大な禁止事項は検出されませんでした。"}</p>
+              {review.blockedKeywords.length > 0 && <small>検出語: {review.blockedKeywords.join(", ")}</small>}
+            </section>
+          )}
           {submitError && <p className="error">{submitError}</p>}
-          <button className="primary-button" disabled={!description || uploading} type="submit">
+          <button className="primary-button" disabled={!description || uploading || checkingItem || review?.prohibited} type="submit">
             <ShoppingBag size={18} />
-            出品する
+            {checkingItem ? "確認中" : "出品する"}
           </button>
         </form>
       </section>

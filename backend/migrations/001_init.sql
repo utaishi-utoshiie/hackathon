@@ -93,3 +93,19 @@ CREATE TABLE IF NOT EXISTS ai_generations (
   CONSTRAINT fk_ai_generations_user FOREIGN KEY (user_id) REFERENCES users(id),
   CONSTRAINT fk_ai_generations_item FOREIGN KEY (item_id) REFERENCES items(id)
 );
+
+CREATE TABLE IF NOT EXISTS item_moderations (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  item_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  prohibited BOOLEAN NOT NULL DEFAULT FALSE,
+  risk_level VARCHAR(20) NOT NULL DEFAULT 'low',
+  reasons TEXT NOT NULL,
+  blocked_keywords TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_item_moderations_item_created_at (item_id, created_at),
+  INDEX idx_item_moderations_user_created_at (user_id, created_at),
+  INDEX idx_item_moderations_risk_level (risk_level),
+  CONSTRAINT fk_item_moderations_item FOREIGN KEY (item_id) REFERENCES items(id),
+  CONSTRAINT fk_item_moderations_user FOREIGN KEY (user_id) REFERENCES users(id)
+);
