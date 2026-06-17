@@ -92,8 +92,17 @@
 - Added `item_scene_generations` persistence and API endpoints for per-user generated item scenes.
 - Stopped exposing private profile photos to other users in DM payloads.
 
+### 2026-06-18 AI Agent Negotiation and Dual Dashboards
+
+- Added dynamic database migration hooks: auto-expanding the `items` table with `min_price` and `ai_personality`, and creating the `negotiations` table.
+- Implemented an iterative 6-turn multi-agent price negotiation simulator endpoint (`POST /api/items/{id}/negotiate`), executing a live simulated price bargaining loop between Buyer AI (budget & desire-driven) and Seller AI (character personality-driven), completing automatic purchases on success.
+- Created interactive React UI overlays in `CreateItemScreen` and `ItemDetailScreen` to allow sellers to specify minimum price and agent personality, and allow buyers to activate AI negotiation with live-reveal chat animations and sequential turn-by-turn dialogue suspense.
+- Created `GET /api/my/stats` to aggregate and return personal analytics for the logged-in user (sold revenue, quantities, active listings, likes, categories, and sales trends).
+- Refactored `MyPageScreen` to feature a tab toggle between Listings and "My Dashboard" (個人分析), visualizing personal sales KPIs and trend progress bars.
+- Integrated a secure "🛡️ システム管理者ダッシュボードを開く" button in the profile section on My Page for users with the `admin` role to transition seamlessly to the platform-wide Admin Dashboard.
+- Added comprehensive Go unit tests for middleware (`requireAdmin`), helper functions (`splitClean`), and formatting logic (`formatHistory`), successfully verifying compilation and test suites.
+
 ## Remaining Notes
 
 - `OPENAI_API_KEY` must be set before AI generation works in the running backend.
-- Basic tests are still TODO.
 - Demo script is still TODO.
