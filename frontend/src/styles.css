@@ -477,7 +477,7 @@ form {
 }
 
 .content-grid {
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .card-grid {
@@ -501,19 +501,6 @@ form {
   display: grid;
   gap: 4px;
   padding: 0 16px;
-}
-
-.shortcut-panel {
-  display: grid;
-  gap: 12px;
-}
-
-.shortcut-row {
-  align-items: center;
-  border-radius: 22px;
-  display: flex;
-  justify-content: space-between;
-  padding: 16px;
 }
 
 .split-heading {

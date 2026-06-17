@@ -523,7 +523,7 @@ function HomeScreen({
               <strong>{leadItem.title}</strong>
               <span>¥{leadItem.price.toLocaleString()}</span>
               <small>{leadItem.sellerName} さんが出品</small>
-              <small>{ratingLabel(leadItem.sellerRatingAvg, leadItem.sellerReviewCount)}</small>
+              <small>いいね {leadItem.likeCount}</small>
             </div>
           </button>
         )}
@@ -586,38 +586,15 @@ function HomeScreen({
                   <strong>{item.title}</strong>
                   <span>¥{item.price.toLocaleString()}</span>
                   <small>
-                    {item.category} / {item.status}
+                    {item.category} / {statusLabel(item.status)}
                   </small>
-                  <small>{ratingLabel(item.sellerRatingAvg, item.sellerReviewCount)}</small>
+                  <small>いいね {item.likeCount}</small>
                 </div>
               </button>
             ))}
             {latestItems.length === 0 && <p className="muted">まだ商品がありません。</p>}
           </div>
         </section>
-
-        <aside className="panel shortcut-panel">
-          <div className="section-head">
-            <div>
-              <p className="eyebrow">Shortcut</p>
-              <h3>導線</h3>
-            </div>
-          </div>
-          <button className="shortcut-row" onClick={onOpenSell}>
-            <IconLabel icon={PackagePlus} label="出品" />
-            <ChevronRight size={18} />
-          </button>
-          <button className="shortcut-row" onClick={onOpenMessages}>
-            <IconLabel icon={MessageCircle} label="DM" />
-            <ChevronRight size={18} />
-          </button>
-          {leadItem && (
-            <button className="shortcut-row" onClick={() => onOpenItem(leadItem.id)}>
-              <IconLabel icon={ShoppingBag} label="詳細" />
-              <ChevronRight size={18} />
-            </button>
-          )}
-        </aside>
       </div>
     </section>
   );
