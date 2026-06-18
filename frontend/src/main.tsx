@@ -349,6 +349,23 @@ function App() {
         </header>
       )}
 
+      {user && route.page !== "auth" && (
+        <nav className="nav-bar">
+          {PRIMARY_NAV.map((nav) => {
+            const active = route.page === nav.page;
+            return (
+              <button
+                key={nav.page}
+                className={active ? "nav-link active" : "nav-link"}
+                onClick={() => navigate({ page: nav.page })}
+              >
+                <IconLabel icon={nav.icon} label={nav.label} />
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
       {route.page === "auth" ? (
         <AuthScreen onSessionUpdated={updateSession} notice={notice} />
       ) : (
@@ -457,21 +474,6 @@ function App() {
 
           {route.page === "help" && <HelpScreen />}
         </>
-      )}
-
-      {user && (
-        <nav className="footer-nav">
-          {PRIMARY_NAV.map((nav) => (
-            <button
-              key={nav.page}
-              className={route.page === nav.page ? "nav-link active" : "nav-link"}
-              onClick={() => navigate({ page: nav.page })}
-            >
-              <nav.icon size={20} />
-              <span>{nav.label}</span>
-            </button>
-          ))}
-        </nav>
       )}
 
       {demoTourActive && (
