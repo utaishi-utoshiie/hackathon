@@ -459,15 +459,30 @@ function AuthScreen({
   const e_prevent = (e: FormEvent) => e.preventDefault();
 
   return (
-    <section className="screen auth-screen">
-      <div className="auth-brand">
-        <Store size={48} style={{ color: "#d85b46", marginBottom: "8px" }} />
-        <h1>Next Market</h1>
-        <p className="subtitle">AI & Stripeエスクロー搭載・次世代型マーケットプレイス</p>
+    <section className="auth-layout">
+      <div className="auth-hero">
+        <p className="eyebrow">Next Market</p>
+        <h1>フリマ体験を、最初の一画面から整える。</h1>
+        <p className="lede">AI交渉エージェントから、マルチホップ物々交換、Stripeエスクロー、AI自動写真補正まで完備した最先端フリマ</p>
+        <div className="auth-points">
+          <article>
+            <IconLabel icon={Store} label="探す" />
+          </article>
+          <article>
+            <IconLabel icon={PackagePlus} label="売る" />
+          </article>
+          <article>
+            <IconLabel icon={MessageCircle} label="話す" />
+          </article>
+        </div>
       </div>
 
-      <article className="panel auth-panel">
-        <div className="tab-buttons">
+      <section className="auth-card panel">
+        <div className="panel-heading">
+          <LogIn size={20} />
+          <h2>{mode === "register" ? "新規登録" : "ログイン"}</h2>
+        </div>
+        <div className="segmented">
           <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>
             新規登録
           </button>
@@ -491,14 +506,15 @@ function AuthScreen({
             <label>パスワード (6文字以上)</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
-          <button className="primary-button" disabled={loading} type="submit" style={{ padding: "14px" }}>
+          <button className="primary-button" disabled={loading} type="submit" style={{ padding: "14px", width: "100%" }}>
+            <LogIn size={18} />
             {loading ? "通信中..." : mode === "register" ? "無料でアカウントを作成" : "ログインする"}
           </button>
         </form>
 
-        {error && <p className="error">{error}</p>}
-        {notice && <p className="notice inline-notice">{notice}</p>}
-      </article>
+        {error && <p className="error" style={{ marginTop: "12px" }}>{error}</p>}
+        {notice && <p className="notice inline-notice" style={{ marginTop: "12px" }}>{notice}</p>}
+      </section>
     </section>
   );
 }
