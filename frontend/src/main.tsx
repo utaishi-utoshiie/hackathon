@@ -32,6 +32,35 @@ import { MyPageScreen } from "./MyPageScreen";
 
 const API_BASE = "/api";
 
+/**
+ * ネットワーク、データベース、OpenAI等から発生した未加工の技術的エラーを傍受し、
+ * 親切、丁寧、かつ解決策を含んだ日本語の案内文面に自動翻訳・クレンジングします。
+ */
+function cleanErrorMessage(err: any, fallback: string): string {
+  if (!err) return fallback;
+  const msg = err instanceof Error ? err.message : String(err);
+  if (!msg) return fallback;
+
+  // OpenAI の接続エラーや、APIキー未設定、利用枠制限
+  if (msg.includes("OpenAI") || msg.includes("api.openai.com") || msg.includes("quota") || msg.includes("502") || msg.includes("Bad Gateway") || msg.includes("Authorization")) {
+    return "OpenAIのAPIキー設定が正しく完了していないか、一時的な利用制限に達しています。サーバーの環境変数設定をご確認ください。";
+  }
+  // 認証、セッション切れ
+  if (msg.includes("Unauthorized") || msg.includes("token") || msg.includes("401") || msg.includes("authorization required")) {
+    return "セッションの有効期限が切れたか、ログイン情報が不正です。一度ログアウトし、再度ログインし直してお試しください。";
+  }
+  // ネットワーク・接続問題
+  if (msg.includes("connection") || msg.includes("network") || msg.includes("dial tcp") || msg.includes("http")) {
+    return "サーバーとのネットワーク接続に一時的なエラーが発生しました。インターネット回線をご確認の上、もう一度お試しください。";
+  }
+  // データベース重複キーエラー
+  if (msg.includes("Duplicate entry") || msg.includes("1062")) {
+    return "すでに登録済みのデータ（重複）が存在します。画面上部の『⚡ デモデータを自動投入』をクリックして初期設定からやり直してください。";
+  }
+
+  return msg;
+}
+
 function MarkdownBlock({ text, className }: { text: string; className?: string }) {
   return <div className={className ? `markdown-block ${className}` : "markdown-block"} dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
 }
@@ -1196,7 +1225,7 @@ function ItemDetailScreen({
       const data = await api<{ scene: ItemScene | null }>(`/items/${currentItem.id}/ai-scene`);
       setScene(data.scene);
     } catch (err) {
-      setSceneError(err instanceof Error ? err.message : "AI画像の読み込みに失敗しました");
+      setSceneError(cleanErrorMessage(err, "AI画像の読み込みに失敗しました"));
     }
   }
 
@@ -1211,7 +1240,7 @@ function ItemDetailScreen({
       });
       setAnswer(data.answer);
     } catch (err) {
-      setAIError(err instanceof Error ? err.message : "AI回答の取得に失敗しました");
+      setAIError(cleanErrorMessage(err, "AI回答の取得に失敗しました"));
     } finally {
       setLoadingAI(false);
     }
@@ -1226,7 +1255,7 @@ function ItemDetailScreen({
       setIsPlayingVideo(false);
       setVideoUrl("");
     } catch (err) {
-      setSceneError(err instanceof Error ? err.message : "AI画像の生成に失敗しました");
+      setSceneError(cleanErrorMessage(err, "AI画像の生成に失敗しました"));
     } finally {
       setSceneLoading(false);
     }
@@ -1249,7 +1278,7 @@ function ItemDetailScreen({
       onNotice(data.simulated ? "映画風シネマグラフを生成しました！" : "AI動画の生成が完了しました！");
       if (onCompleteStep) onCompleteStep(3);
     } catch (err) {
-      setVideoError(err instanceof Error ? err.message : "AI動画の生成に失敗しました");
+      setVideoError(cleanErrorMessage(err, "AI動画の生成に失敗しました"));
     } finally {
       setVideoLoading(false);
     }
@@ -1315,7 +1344,7 @@ function ItemDetailScreen({
         }
       }, 1500); // 1.5s delay to slide in dialogue boxes beautifully!
     } catch (err) {
-      setNegError(err instanceof Error ? err.message : "代理交渉の開始に失敗しました");
+      setNegError(cleanErrorMessage(err, "代理交渉の開始に失敗しました"));
     } finally {
       setNegotiating(false);
     }
