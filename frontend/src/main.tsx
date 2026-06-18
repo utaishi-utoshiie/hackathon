@@ -204,8 +204,21 @@ function App() {
     headers.set("Content-Type", "application/json");
     if (token) headers.set("Authorization", `Bearer ${token}`);
     const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error ?? "API error");
+    
+    let data: any;
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      // Strip HTML tags for clean rendering if it's a raw HTML error page
+      const cleanText = text.replace(/<[^>]*>/g, "").trim().substring(0, 150);
+      data = { error: cleanText || `HTTP ${response.status}: ${response.statusText}` };
+    }
+    
+    if (!response.ok) {
+      throw new Error(data.error ?? "API error");
+    }
     return data;
   }
 
