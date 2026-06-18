@@ -185,27 +185,27 @@ function AdminModerationsView({ api }: { api: <T>(path: string, options?: Reques
       </p>
 
       <div className="table-responsive">
-        <table className="admin-table" style={{ width: "100%", borderCollapse: "collapse", color: "#1f2937", background: "#fff", borderRadius: "8px", overflow: "hidden" }}>
+        <table className="admin-table">
           <thead>
-            <tr style={{ background: "#f1f5f9", textAlign: "left" }}>
-              <th style={{ padding: "12px" }}>商品情報</th>
-              <th style={{ padding: "12px" }}>出品者</th>
-              <th style={{ padding: "12px" }}>リスク判定</th>
-              <th style={{ padding: "12px" }}>検知されたキーワード</th>
-              <th style={{ padding: "12px" }}>不適切判定の理由・詳細</th>
-              <th style={{ padding: "12px" }}>検知日時</th>
+            <tr>
+              <th>商品情報</th>
+              <th>出品者</th>
+              <th>リスク判定</th>
+              <th>検知されたキーワード</th>
+              <th>不適切判定の理由・詳細</th>
+              <th>検知日時</th>
             </tr>
           </thead>
           <tbody>
             {moderations.map((m) => (
-              <tr key={m.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                <td style={{ padding: "12px" }}>
+              <tr key={m.id}>
+                <td>
                   <strong>{m.itemTitle}</strong>
                   <br />
                   <small style={{ color: "#64748b" }}>ID: #{m.itemId}</small>
                 </td>
-                <td style={{ padding: "12px" }}>{m.sellerName}</td>
-                <td style={{ padding: "12px" }}>
+                <td>{m.sellerName}</td>
+                <td>
                   <span style={{ 
                     background: m.riskLevel === "high" ? "#fee2e2" : m.riskLevel === "medium" ? "#fef3c7" : "#ecfdf5",
                     color: m.riskLevel === "high" ? "#991b1b" : m.riskLevel === "medium" ? "#92400e" : "#065f46",
@@ -214,9 +214,9 @@ function AdminModerationsView({ api }: { api: <T>(path: string, options?: Reques
                     {m.riskLevel.toUpperCase()}
                   </span>
                 </td>
-                <td style={{ padding: "12px", color: "#b91c1c", fontWeight: 600 }}>{m.blockedKeywords || "なし"}</td>
-                <td style={{ padding: "12px", fontSize: "13px", color: "#475569" }}>{m.reasons}</td>
-                <td style={{ padding: "12px", fontSize: "12px", color: "#64748b" }}>{new Date(m.createdAt).toLocaleString("ja-JP")}</td>
+                <td style={{ color: "#b91c1c", fontWeight: 600 }}>{m.blockedKeywords || "なし"}</td>
+                <td style={{ fontSize: "13px", color: "#475569" }}>{m.reasons}</td>
+                <td style={{ fontSize: "12px", color: "#64748b" }}>{new Date(m.createdAt).toLocaleString("ja-JP")}</td>
               </tr>
             ))}
             {moderations.length === 0 && (
@@ -272,33 +272,33 @@ function AdminUsersView({ api }: { api: <T>(path: string, options?: RequestInit)
       </p>
 
       <div className="table-responsive">
-        <table className="admin-table" style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: "8px", overflow: "hidden" }}>
+        <table className="admin-table">
           <thead>
-            <tr style={{ background: "#f1f5f9", textAlign: "left" }}>
-              <th style={{ padding: "12px" }}>アバター</th>
-              <th style={{ padding: "12px" }}>ユーザーID</th>
-              <th style={{ padding: "12px" }}>名前</th>
-              <th style={{ padding: "12px" }}>メールアドレス</th>
-              <th style={{ padding: "12px" }}>ロール権限</th>
+            <tr>
+              <th>アバター</th>
+              <th>ユーザーID</th>
+              <th>名前</th>
+              <th>メールアドレス</th>
+              <th>ロール権限</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                <td style={{ padding: "12px" }}>
+              <tr key={u.id}>
+                <td>
                   <img
+                    className="avatar-img"
                     src={getPublicUrl(u.avatarUrl) || "./placeholder-avatar.svg"}
                     alt={u.name}
-                    style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }}
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = "./placeholder-avatar.svg";
                     }}
                   />
                 </td>
-                <td style={{ padding: "12px" }}>#{u.id}</td>
-                <td style={{ padding: "12px" }}><strong>{u.name}</strong></td>
-                <td style={{ padding: "12px" }}>{u.email}</td>
-                <td style={{ padding: "12px" }}>
+                <td>#{u.id}</td>
+                <td><strong>{u.name}</strong></td>
+                <td>{u.email}</td>
+                <td>
                   <button 
                     disabled={updatingId === u.id} 
                     onClick={() => void toggleRole(u)}
