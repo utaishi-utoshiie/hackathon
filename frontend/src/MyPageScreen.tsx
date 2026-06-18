@@ -332,6 +332,60 @@ export function MyPageScreen({
               ))}
               {myItems.length === 0 && <p className="muted">まだ出品がありません。最初の1品を登録しましょう。</p>}
             </div>
+
+            {/* Purchased Items Section */}
+            <div className="section-head" style={{ marginTop: "40px", borderTop: "1px solid #eadfd3", paddingTop: "24px" }}>
+              <div>
+                <p className="eyebrow" style={{ color: "#d85b46" }}>My Purchases</p>
+                <h3>購入した商品（Stripe決済済）</h3>
+              </div>
+            </div>
+            <div className="card-grid compact-grid">
+              {(() => {
+                const boughtConversations = (conversations || []).filter(
+                  (c) => c.buyerId === user?.id && c.purchaseStatus && c.purchaseStatus !== ""
+                );
+                return (
+                  <>
+                    {boughtConversations.map((c) => (
+                      <article key={c.id} className="catalog-card compact my-item-card" style={{ borderLeft: "4px solid #34d399" }}>
+                        <img src={getPublicUrl(c.itemImageUrl) || "/placeholder.svg"} alt="" />
+                        <div>
+                          <strong>{c.itemTitle}</strong>
+                          <span>¥{c.itemPrice.toLocaleString()}</span>
+                          <small style={{ 
+                            color: c.purchaseStatus === "completed" ? "#047857" : "#0369a1", 
+                            fontWeight: "bold",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px"
+                          }}>
+                            {c.purchaseStatus === "paid" ? "🔒 エスクロー支払い済・発送待ち" : c.purchaseStatus === "shipped" ? "🚚 配送中・受取報告待ち" : "✓ 取引完了"}
+                          </small>
+                        </div>
+                        <div className="my-item-actions" style={{ marginTop: "8px" }}>
+                          <button className="ghost-button" onClick={() => onOpenItem(c.itemId)}>
+                            詳細
+                          </button>
+                          <button 
+                            className="primary-button" 
+                            onClick={() => {
+                              window.location.hash = "messages";
+                            }}
+                            style={{ background: "#34d399", color: "#ffffff", border: "none", fontSize: "11px", padding: "6px 12px", borderRadius: "6px" }}
+                          >
+                            💬 取引ナビを開く
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                    {boughtConversations.length === 0 && (
+                      <p className="muted" style={{ gridColumn: "span 3" }}>購入した商品はまだありません。ホーム画面から商品を購入してみましょう！</p>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </>
         )}
 

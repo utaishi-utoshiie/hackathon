@@ -1116,6 +1116,13 @@ function ItemDetailScreen({
   const [negError, setNegError] = useState("");
 
   const timerRef = useRef<any>(null);
+  const dialogueEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (dialogueEndRef.current) {
+      dialogueEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [dialogueIndex, negotiationResult]);
 
   // Autopilot Actions inside Item Detail
   useEffect(() => {
@@ -1503,6 +1510,7 @@ function ItemDetailScreen({
                           <small style={{ fontSize: "10px", color: "#7d8b99", alignSelf: "flex-end" }}>提示額: ¥{chat.price.toLocaleString()} ({chat.action.toUpperCase()})</small>
                         </div>
                       ))}
+                      <div ref={dialogueEndRef} />
                     </div>
 
                     {dialogueIndex < res.dialogue.length - 1 && (
