@@ -137,9 +137,17 @@ function App() {
         break;
       case 2:
         setAutoPilotPrompt("🔮 [2/10] iPhone 14 Pro を3D空間スキャンし、材質や摩耗率、適正価値を測定中...");
+        // Automatically close the scanner and advance to negotiation setup after 4.5s
+        timer = setTimeout(() => {
+          setAutoPilotStep(3);
+        }, 4500);
         break;
       case 3:
         setAutoPilotPrompt("🤖 [3/10] 3Dスキャンで判定された適正価値を参考に、AI価格交渉室を起動中...");
+        // Automatically open the negotiation modal and advance to the negotiation run after 2.2s
+        timer = setTimeout(() => {
+          setAutoPilotStep(4);
+        }, 2200);
         break;
       case 4:
         setAutoPilotPrompt("💬 [4/10] お互いの意思決定AI同士で値下げ・購入合意を自律交渉中（完了を検知します）...");
