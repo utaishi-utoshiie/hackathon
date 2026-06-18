@@ -50,8 +50,10 @@ type item struct {
 	ID                int64     `json:"id"`
 	SellerID          int64     `json:"sellerId"`
 	SellerName        string    `json:"sellerName"`
+	SellerAvatarURL   string    `json:"sellerAvatarUrl"`
 	SellerRatingAvg   float64   `json:"sellerRatingAvg"`
 	SellerRatingCount int       `json:"sellerRatingCount"`
+	SellerTxCount     int       `json:"sellerTxCount"`
 	Title             string    `json:"title"`
 	Description       string    `json:"description"`
 	Category          string    `json:"category"`

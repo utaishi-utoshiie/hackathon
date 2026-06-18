@@ -40,9 +40,10 @@ func (a *app) listItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-		SELECT i.id, i.seller_id, u.name, 
+		SELECT i.id, i.seller_id, u.name, COALESCE(u.avatar_url, ''),
 		       COALESCE((SELECT AVG(rating) FROM user_reviews WHERE reviewee_id = i.seller_id), 0),
 		       (SELECT COUNT(*) FROM user_reviews WHERE reviewee_id = i.seller_id),
+		       (SELECT COUNT(*) FROM purchases WHERE seller_id = i.seller_id),
 		       i.title, i.description, i.category, i.price, i.status,
 		       COALESCE((SELECT image_url FROM item_images WHERE item_id = i.id ORDER BY sort_order LIMIT 1), ''),
 		       (SELECT COUNT(*) FROM likes WHERE item_id = i.id), i.created_at
@@ -65,7 +66,7 @@ func (a *app) listItems(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var it item
 		if err := rows.Scan(
-			&it.ID, &it.SellerID, &it.SellerName, &it.SellerRatingAvg, &it.SellerRatingCount,
+			&it.ID, &it.SellerID, &it.SellerName, &it.SellerAvatarURL, &it.SellerRatingAvg, &it.SellerRatingCount, &it.SellerTxCount,
 			&it.Title, &it.Description, &it.Category, &it.Price, &it.Status, &it.ImageURL,
 			&it.LikeCount, &it.CreatedAt,
 		); err != nil {
@@ -81,9 +82,10 @@ func (a *app) listItems(w http.ResponseWriter, r *http.Request) {
 func (a *app) listMyItems(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	rows, err := a.dbHandle().QueryContext(r.Context(), `
-		SELECT i.id, i.seller_id, u.name,
+		SELECT i.id, i.seller_id, u.name, COALESCE(u.avatar_url, ''),
 		       COALESCE((SELECT AVG(rating) FROM user_reviews WHERE reviewee_id = i.seller_id), 0),
 		       (SELECT COUNT(*) FROM user_reviews WHERE reviewee_id = i.seller_id),
+		       (SELECT COUNT(*) FROM purchases WHERE seller_id = i.seller_id),
 		       i.title, i.description, i.category, i.price, i.status,
 		       COALESCE((SELECT image_url FROM item_images WHERE item_id = i.id ORDER BY sort_order LIMIT 1), ''),
 		       (SELECT COUNT(*) FROM likes WHERE item_id = i.id), i.created_at
@@ -102,7 +104,7 @@ func (a *app) listMyItems(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var it item
 		if err := rows.Scan(
-			&it.ID, &it.SellerID, &it.SellerName, &it.SellerRatingAvg, &it.SellerRatingCount,
+			&it.ID, &it.SellerID, &it.SellerName, &it.SellerAvatarURL, &it.SellerRatingAvg, &it.SellerRatingCount, &it.SellerTxCount,
 			&it.Title, &it.Description, &it.Category, &it.Price, &it.Status, &it.ImageURL,
 			&it.LikeCount, &it.CreatedAt,
 		); err != nil {
@@ -438,9 +440,10 @@ func (a *app) createUserReview(w http.ResponseWriter, r *http.Request) {
 func (a *app) findItem(ctx context.Context, id int64) (item, error) {
 	var it item
 	err := a.dbHandle().QueryRowContext(ctx, `
-		SELECT i.id, i.seller_id, u.name,
+		SELECT i.id, i.seller_id, u.name, COALESCE(u.avatar_url, ''),
 		       COALESCE((SELECT AVG(rating) FROM user_reviews WHERE reviewee_id = i.seller_id), 0),
 		       (SELECT COUNT(*) FROM user_reviews WHERE reviewee_id = i.seller_id),
+		       (SELECT COUNT(*) FROM purchases WHERE seller_id = i.seller_id),
 		       i.title, i.description, i.category, i.price, i.min_price, i.ai_personality, i.barter_enabled, i.want_category, i.status,
 		       COALESCE((SELECT image_url FROM item_images WHERE item_id = i.id ORDER BY sort_order LIMIT 1), ''),
 		       (SELECT COUNT(*) FROM likes WHERE item_id = i.id), i.created_at
@@ -448,7 +451,7 @@ func (a *app) findItem(ctx context.Context, id int64) (item, error) {
 		JOIN users u ON u.id = i.seller_id
 		WHERE i.id = ?`, id,
 	).Scan(
-		&it.ID, &it.SellerID, &it.SellerName, &it.SellerRatingAvg, &it.SellerRatingCount,
+		&it.ID, &it.SellerID, &it.SellerName, &it.SellerAvatarURL, &it.SellerRatingAvg, &it.SellerRatingCount, &it.SellerTxCount,
 		&it.Title, &it.Description, &it.Category, &it.Price, &it.MinPrice, &it.AIPersonality, &it.BarterEnabled, &it.WantCategory, &it.Status, &it.ImageURL,
 		&it.LikeCount, &it.CreatedAt,
 	)

@@ -1344,6 +1344,43 @@ function ItemDetailScreen({
             <span style={{ fontSize: "14px" }}>❤️ {currentItem.likeCount} いいね</span>
           </div>
 
+          {/* Seller Trust Profile Badge Card */}
+          <div style={{ 
+            background: "#faf8f5", 
+            border: "1px solid #eadfd3", 
+            borderRadius: "12px", 
+            padding: "16px", 
+            display: "flex", 
+            alignItems: "center", 
+            gap: "16px" 
+          }}>
+            <img 
+              src={getPublicUrl(currentItem.sellerAvatarUrl) || "./placeholder-avatar.svg"} 
+              alt=""
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = "./placeholder-avatar.svg";
+              }}
+              style={{ width: "52px", height: "52px", borderRadius: "50%", border: "2px solid #eadfd3", objectFit: "cover" }} 
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <strong style={{ fontSize: "15px", color: "#1f2937" }}>{currentItem.sellerName} さん</strong>
+                <span style={{ background: "#ecfdf5", color: "#059669", fontSize: "10px", fontWeight: "bold", padding: "2px 6px", borderRadius: "12px", display: "inline-flex", alignItems: "center", gap: "2px" }}>
+                  ✓ 本人確認済
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "12px", color: "#4b5563", fontWeight: 600 }}>
+                  ⭐ {currentItem.sellerRatingAvg > 0 ? currentItem.sellerRatingAvg.toFixed(1) : "未評価"} 
+                  <span style={{ color: "#9ca3af", fontWeight: "normal", marginLeft: "2px" }}>({currentItem.sellerRatingCount}件)</span>
+                </span>
+                <span style={{ fontSize: "12px", color: "#4b5563" }}>
+                  🤝 取引実績: <strong style={{ color: "#d85b46" }}>{currentItem.sellerTxCount}件</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
           <div className="detail-actions">
             <button className="ghost-button" onClick={like}>❤️ いいねする</button>
             {user?.id !== currentItem.sellerId && currentItem.status === "active" && (

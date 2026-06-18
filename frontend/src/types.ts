@@ -10,8 +10,10 @@ export interface Item {
   id: number;
   sellerId: number;
   sellerName: string;
+  sellerAvatarUrl: string;
   sellerRatingAvg: number;
   sellerRatingCount: number;
+  sellerTxCount: number;
   title: string;
   description: string;
   category: string;
