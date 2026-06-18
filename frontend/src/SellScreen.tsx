@@ -175,11 +175,19 @@ export function SellScreen({
               <option value="anime">元気でかわいいアニメキャラ（anime）</option>
             </select>
           </div>
-          <div className="input-group" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", marginTop: "24px" }}>
-              <input type="checkbox" checked={barterEnabled} onChange={(e) => setBarterEnabled(e.target.checked)} />
-              <strong style={{ fontSize: "14px" }}>🔄 わらしべ物々交換を許可する</strong>
-            </label>
+          <div className="input-group">
+            <label style={{ opacity: 0 }}>&nbsp;</label>
+            <div style={{ display: "flex", alignItems: "center", height: "48px" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", margin: 0 }}>
+                <input 
+                  type="checkbox" 
+                  checked={barterEnabled} 
+                  onChange={(e) => setBarterEnabled(e.target.checked)} 
+                  style={{ width: "16px", height: "16px", margin: 0, cursor: "pointer" }}
+                />
+                <strong style={{ fontSize: "14px", color: "#1f2937" }}>🔄 わらしべ物々交換を許可する</strong>
+              </label>
+            </div>
           </div>
         </div>
 
