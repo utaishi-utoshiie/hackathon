@@ -1283,8 +1283,8 @@ function ItemDetailScreen({
       </div>
 
       <section className="detail-layout">
-        <article className="panel gallery-panel">
-          <img className="main-item-image" src={getPublicUrl(currentItem.imageUrl) || "/placeholder.svg"} alt="" />
+        <article className="media-panel panel">
+          <img className="hero-image" src={getPublicUrl(currentItem.imageUrl) || "/placeholder.svg"} alt="" />
         </article>
 
         <article className="panel detail-panel" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
