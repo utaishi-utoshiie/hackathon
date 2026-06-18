@@ -129,7 +129,10 @@ function App() {
         setAutoPilotPrompt("🚀 [1/10] iPhone 14 Pro 詳細ページへ自動テレポート中...");
         timer = setTimeout(() => {
           navigate({ page: "item", itemId: 9901 });
-          setAutoPilotStep(2);
+          // Safe 1.2s mount lag to ensure ItemDetailScreen is fully loaded before entering step 2
+          timer = setTimeout(() => {
+            setAutoPilotStep(2);
+          }, 1200);
         }, 2200);
         break;
       case 2:
@@ -146,14 +149,20 @@ function App() {
         timer = setTimeout(() => {
           navigate({ page: "messages" });
           setSelectedConversationId(999);
-          setAutoPilotStep(6);
+          // Safe 1.2s mount lag to ensure MessagesScreen is fully loaded before entering step 6
+          timer = setTimeout(() => {
+            setAutoPilotStep(6);
+          }, 1200);
         }, 4500);
         break;
       case 6:
         setAutoPilotPrompt("🔄 [6/10] マイページの「AIわらしべ物々交換」ボードを開きます...");
         timer = setTimeout(() => {
           navigate({ page: "mypage" });
-          setAutoPilotStep(7);
+          // Safe 1.2s mount lag to ensure MyPageScreen is fully loaded before entering step 7
+          timer = setTimeout(() => {
+            setAutoPilotStep(7);
+          }, 1200);
         }, 4000);
         break;
       case 7:

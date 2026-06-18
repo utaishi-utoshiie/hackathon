@@ -198,15 +198,29 @@ export function ItemDetailScreen({
     if (!autoPilot || autoPilotStep !== 9) return;
 
     const timer = setTimeout(() => {
-      generateScene().then(() => {
-        setTimeout(() => {
-          generateSceneVideo().then(() => {
-            setTimeout(() => {
-              if (onCompleteAutopilotStep) onCompleteAutopilotStep(9);
-            }, 5500);
-          });
-        }, 2200);
-      });
+      const runGenerations = async () => {
+        try {
+          await generateScene();
+        } catch (e) {
+          console.warn("Autopilot scene generation failed, continuing tour:", e);
+        }
+
+        // Wait 2.2s for display
+        await new Promise((resolve) => setTimeout(resolve, 2200));
+
+        try {
+          await generateSceneVideo();
+        } catch (e) {
+          console.warn("Autopilot video generation failed, continuing tour:", e);
+        }
+
+        // Wait 5.5s for display
+        await new Promise((resolve) => setTimeout(resolve, 5500));
+
+        if (onCompleteAutopilotStep) onCompleteAutopilotStep(9);
+      };
+
+      void runGenerations();
     }, 1500);
 
     return () => clearTimeout(timer);
