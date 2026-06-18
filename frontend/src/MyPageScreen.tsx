@@ -30,7 +30,9 @@ export function MyPageScreen({
   onOpenSell,
   onOpenItem,
   onCancelled,
-  onCompleteStep
+  onCompleteStep,
+  autoPilot,
+  autoPilotStep
 }: {
   user: User | null;
   myItems: Item[];
@@ -41,6 +43,8 @@ export function MyPageScreen({
   onOpenItem: (itemId: number) => void;
   onCancelled: (itemId: number) => Promise<void>;
   onCompleteStep?: (step: number) => void;
+  autoPilot?: boolean;
+  autoPilotStep?: number;
 }) {
   const [uploading, setUploading] = useState(false);
   const [profileError, setProfileError] = useState("");
@@ -54,6 +58,33 @@ export function MyPageScreen({
   const [barterLoops, setBarterLoops] = useState<BarterLoopDetail[]>([]);
   const [barterLoading, setBarterLoading] = useState(false);
   const [barterError, setBarterError] = useState("");
+
+  // Autopilot Actions inside My Page
+  useEffect(() => {
+    if (!autoPilot) return;
+
+    if (autoPilotStep === 5) {
+      setActiveTab("barter");
+    } else if (autoPilotStep === 6) {
+      // Auto-approve barter loop #999!
+      const timer = setTimeout(() => {
+        acceptBarter(999);
+      }, 1500);
+      return () => clearTimeout(timer);
+    } else if (autoPilotStep === 7) {
+      // Auto-ship & receive barter loop #999!
+      const timerShip = setTimeout(() => {
+        shipBarter(999);
+      }, 1000);
+      const timerReceive = setTimeout(() => {
+        receiveBarter(999);
+      }, 3500);
+      return () => {
+        clearTimeout(timerShip);
+        clearTimeout(timerReceive);
+      };
+    }
+  }, [autoPilot, autoPilotStep]);
 
   // Compute active escrow dynamically
   const escrowBalance = (conversations || []).reduce((acc, c) => {
