@@ -24,6 +24,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
+	"next-market/backend/migrations"
 )
 
 func init() {
@@ -629,116 +630,8 @@ func (a *app) saveAI(ctx context.Context, userID int64, itemID *int64, featureTy
 	)
 }
 
-func ensureIndex(ctx context.Context, db *sql.DB, tableName, indexName, createSQL string) error {
-	var count int
-	err := db.QueryRowContext(ctx, `
-		SELECT COUNT(*) 
-		FROM information_schema.statistics 
-		WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`, tableName, indexName,
-	).Scan(&count)
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		log.Printf("Dynamically and idempotently applying composite performance index: %s on %s...", indexName, tableName)
-		if _, err := db.ExecContext(ctx, createSQL); err != nil {
-			return fmt.Errorf("failed to create index %s: %v", indexName, err)
-		}
-	}
-	return nil
-}
-
-func ensureTable(ctx context.Context, db *sql.DB, createTableSQL string) error {
-	_, err := db.ExecContext(ctx, createTableSQL)
-	return err
-}
-
-func ensureColumn(ctx context.Context, db *sql.DB, tableName, columnName, addColumnSQL string) error {
-	var count int
-	err := db.QueryRowContext(ctx, `
-		SELECT COUNT(*) 
-		FROM information_schema.columns 
-		WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`, tableName, columnName,
-	).Scan(&count)
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		log.Printf("Dynamically and idempotently applying schema column addition: %s on %s...", columnName, tableName)
-		if _, err := db.ExecContext(ctx, addColumnSQL); err != nil {
-			return fmt.Errorf("failed to add column %s to %s: %v", columnName, tableName, err)
-		}
-	}
-	return nil
-}
-
 func migrate(ctx context.Context, db *sql.DB) error {
-	data, err := os.ReadFile("migrations/001_init.sql")
-	if err != nil {
-		return err
-	}
-	for _, stmt := range strings.Split(string(data), ";") {
-		stmt = strings.TrimSpace(stmt)
-		if stmt == "" {
-			continue
-		}
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
-			return err
-		}
-	}
-	if err := ensureColumn(ctx, db, "users", "avatar_url", "ALTER TABLE users ADD COLUMN avatar_url TEXT NULL AFTER role"); err != nil {
-		return err
-	}
-	if err := ensureTable(ctx, db, `CREATE TABLE IF NOT EXISTS item_scene_generations (
-		id BIGINT PRIMARY KEY AUTO_INCREMENT,
-		user_id BIGINT NOT NULL,
-		item_id BIGINT NOT NULL,
-		image_path TEXT NOT NULL,
-		prompt TEXT NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		INDEX idx_item_scene_generations_user_item_created_at (user_id, item_id, created_at),
-		CONSTRAINT fk_item_scene_generations_user FOREIGN KEY (user_id) REFERENCES users(id),
-		CONSTRAINT fk_item_scene_generations_item FOREIGN KEY (item_id) REFERENCES items(id)
-	)`); err != nil {
-		return err
-	}
-
-	if err := ensureColumn(ctx, db, "item_scene_generations", "video_path", "ALTER TABLE item_scene_generations ADD COLUMN video_path TEXT NULL AFTER prompt"); err != nil {
-		return err
-	}
-
-	if err := ensureColumn(ctx, db, "items", "min_price", "ALTER TABLE items ADD COLUMN min_price INT NOT NULL DEFAULT 0 AFTER price"); err != nil {
-		return err
-	}
-	if err := ensureColumn(ctx, db, "items", "ai_personality", "ALTER TABLE items ADD COLUMN ai_personality VARCHAR(50) NOT NULL DEFAULT 'standard' AFTER min_price"); err != nil {
-		return err
-	}
-	if err := ensureTable(ctx, db, `CREATE TABLE IF NOT EXISTS negotiations (
-		id BIGINT PRIMARY KEY AUTO_INCREMENT,
-		item_id BIGINT NOT NULL,
-		buyer_id BIGINT NOT NULL,
-		seller_id BIGINT NOT NULL,
-		buyer_budget INT NOT NULL,
-		desire_level VARCHAR(20) NOT NULL,
-		agreed_price INT NOT NULL,
-		status VARCHAR(30) NOT NULL DEFAULT 'pending',
-		negotiation_log TEXT NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		CONSTRAINT fk_negotiations_item FOREIGN KEY (item_id) REFERENCES items(id),
-		CONSTRAINT fk_negotiations_buyer FOREIGN KEY (buyer_id) REFERENCES users(id),
-		CONSTRAINT fk_negotiations_seller FOREIGN KEY (seller_id) REFERENCES users(id)
-	)`); err != nil {
-		return err
-	}
-
-	if err := ensureColumn(ctx, db, "items", "barter_enabled", "ALTER TABLE items ADD COLUMN barter_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER ai_personality"); err != nil {
-		return err
-	}
-	if err := ensureColumn(ctx, db, "items", "want_category", "ALTER TABLE items ADD COLUMN want_category VARCHAR(100) NOT NULL DEFAULT '' AFTER barter_enabled"); err != nil {
-		return err
-	}
-
-	// Self-healing DB check: If barter_loop_members is missing the 'user_id' column, drop and recreate them cleanly
+	// Self-healing DB check: If barter_loop_members is missing the 'user_id' column, drop and let Goose recreate them cleanly
 	var colCount int
 	_ = db.QueryRowContext(ctx, `
 		SELECT COUNT(*)
@@ -749,81 +642,8 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		_, _ = db.ExecContext(ctx, "DROP TABLE IF EXISTS barter_loops")
 	}
 
-	if err := ensureTable(ctx, db, `CREATE TABLE IF NOT EXISTS barter_loops (
-		id BIGINT PRIMARY KEY AUTO_INCREMENT,
-		status VARCHAR(30) NOT NULL DEFAULT 'pending',
-		justification TEXT NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-	)`); err != nil {
-		return err
-	}
-
-	if err := ensureTable(ctx, db, `CREATE TABLE IF NOT EXISTS barter_loop_members (
-		id BIGINT PRIMARY KEY AUTO_INCREMENT,
-		loop_id BIGINT NOT NULL,
-		user_id BIGINT NOT NULL,
-		item_id BIGINT NOT NULL,
-		receiver_id BIGINT NOT NULL,
-		cash_adjustment INT NOT NULL DEFAULT 0,
-		shipping_status VARCHAR(30) NOT NULL DEFAULT 'pending',
-		CONSTRAINT fk_barter_members_loop FOREIGN KEY (loop_id) REFERENCES barter_loops(id) ON DELETE CASCADE,
-		CONSTRAINT fk_barter_members_user FOREIGN KEY (user_id) REFERENCES users(id),
-		CONSTRAINT fk_barter_members_item FOREIGN KEY (item_id) REFERENCES items(id),
-		CONSTRAINT fk_barter_members_receiver FOREIGN KEY (receiver_id) REFERENCES users(id)
-	)`); err != nil {
-		return err
-	}
-
-	if err := ensureTable(ctx, db, `CREATE TABLE IF NOT EXISTS ai_interactions_log (
-		id BIGINT PRIMARY KEY AUTO_INCREMENT,
-		user_id BIGINT NOT NULL,
-		item_id BIGINT NULL,
-		feature_type VARCHAR(50) NOT NULL,
-		prompt TEXT NOT NULL,
-		result TEXT NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		CONSTRAINT fk_ai_log_user FOREIGN KEY (user_id) REFERENCES users(id),
-		CONSTRAINT fk_ai_log_item FOREIGN KEY (item_id) REFERENCES items(id)
-	)`); err != nil {
-		return err
-	}
-
-	if err := ensureTable(ctx, db, `CREATE TABLE IF NOT EXISTS item_moderations (
-		id BIGINT PRIMARY KEY AUTO_INCREMENT,
-		item_id BIGINT NOT NULL UNIQUE,
-		prohibited TINYINT(1) NOT NULL DEFAULT 0,
-		risk_level VARCHAR(20) NOT NULL DEFAULT 'low',
-		reasons TEXT NOT NULL,
-		blocked_keywords TEXT NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		CONSTRAINT fk_moderation_item FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
-	)`); err != nil {
-		return err
-	}
-
-	// Dynamic and idempotent covering indexes for high-speed analysis
-	if err := ensureIndex(ctx, db, "purchases", "idx_purchases_seller_created_at_price",
-		"CREATE INDEX idx_purchases_seller_created_at_price ON purchases (seller_id, created_at, price)"); err != nil {
-		return err
-	}
-	if err := ensureIndex(ctx, db, "items", "idx_items_seller_status_created_at",
-		"CREATE INDEX idx_items_seller_status_created_at ON items (seller_id, status, created_at)"); err != nil {
-		return err
-	}
-	if err := ensureIndex(ctx, db, "likes", "idx_likes_item_user",
-		"CREATE INDEX idx_likes_item_user ON likes (item_id, user_id)"); err != nil {
-		return err
-	}
-	if err := ensureIndex(ctx, db, "item_images", "idx_images_item_sort_url",
-		"CREATE INDEX idx_images_item_sort_url ON item_images (item_id, sort_order, image_url(255))"); err != nil {
-		return err
-	}
-	if err := ensureIndex(ctx, db, "user_reviews", "idx_reviews_ee_rating",
-		"CREATE INDEX idx_reviews_ee_rating ON user_reviews (reviewee_id, rating)"); err != nil {
-		return err
-	}
-
-	return nil
+	// Run embedded Goose migrations
+	return migrations.RunMigrations(db)
 }
 
 func dsn() (string, error) {

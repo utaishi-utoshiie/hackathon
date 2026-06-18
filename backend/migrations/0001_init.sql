@@ -1,3 +1,6 @@
+-- +goose Up
+-- SQL in section 'Up' is executed when this migration is applied
+
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(80) NOT NULL,
@@ -12,15 +15,20 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS items (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   seller_id BIGINT NOT NULL,
-  title VARCHAR(120) NOT NULL,
+  title VARCHAR(150) NOT NULL,
   description TEXT NOT NULL,
-  category VARCHAR(80) NOT NULL,
+  category VARCHAR(100) NOT NULL,
   price INT NOT NULL,
+  min_price INT NOT NULL DEFAULT 0,
+  ai_personality VARCHAR(50) NOT NULL DEFAULT 'standard',
+  barter_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  want_category VARCHAR(100) NOT NULL DEFAULT '',
   status VARCHAR(30) NOT NULL DEFAULT 'active',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_items_seller_id (seller_id),
-  INDEX idx_items_status_created_at (status, created_at),
+  INDEX idx_items_category (category),
+  INDEX idx_items_price (price),
   CONSTRAINT fk_items_seller FOREIGN KEY (seller_id) REFERENCES users(id)
 );
 
@@ -29,6 +37,8 @@ CREATE TABLE IF NOT EXISTS item_images (
   item_id BIGINT NOT NULL,
   image_url TEXT NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_item_images_item_id (item_id),
   CONSTRAINT fk_item_images_item FOREIGN KEY (item_id) REFERENCES items(id)
 );
 
@@ -141,3 +151,18 @@ CREATE TABLE IF NOT EXISTS item_scene_generations (
   CONSTRAINT fk_item_scene_generations_user FOREIGN KEY (user_id) REFERENCES users(id),
   CONSTRAINT fk_item_scene_generations_item FOREIGN KEY (item_id) REFERENCES items(id)
 );
+
+-- +goose Down
+-- SQL in section 'Down' is executed when this migration is rolled back
+
+DROP TABLE IF EXISTS item_scene_generations;
+DROP TABLE IF EXISTS user_reviews;
+DROP TABLE IF EXISTS item_moderations;
+DROP TABLE IF EXISTS ai_generations;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS conversations;
+DROP TABLE IF EXISTS purchases;
+DROP TABLE IF EXISTS likes;
+DROP TABLE IF EXISTS item_images;
+DROP TABLE IF EXISTS items;
+DROP TABLE IF EXISTS users;
