@@ -192,7 +192,7 @@ func (a *app) resetPasswordDemo(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRowContext(r.Context(), "SELECT id FROM users WHERE email = ?", email).Scan(&id)
 	if err == sql.ErrNoRows {
 		// Does not exist, register them on the fly!
-		res, err := db.ExecContext(r.Context(), 
+		res, err := db.ExecContext(r.Context(),
 			"INSERT INTO users (name, email, password_hash, role) VALUES ('DemoUser', ?, ?, 'user')",
 			email, hashed,
 		)
@@ -202,9 +202,9 @@ func (a *app) resetPasswordDemo(w http.ResponseWriter, r *http.Request) {
 		}
 		newID, _ := res.LastInsertId()
 		writeJSON(w, http.StatusOK, map[string]any{
-			"status": "success", 
+			"status":  "success",
 			"message": fmt.Sprintf("アカウント '%s' が存在しないため、パスワード '%s' で新規自動登録しました！そのままログインしてください。", email, req.Password),
-			"userId": newID,
+			"userId":  newID,
 		})
 		return
 	} else if err != nil {
@@ -220,8 +220,8 @@ func (a *app) resetPasswordDemo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "success",
+		"status":  "success",
 		"message": fmt.Sprintf("アカウント '%s' のパスワードを '%s' に強制上書きしました！そのままログインしてください。", email, req.Password),
-		"userId": id,
+		"userId":  id,
 	})
 }

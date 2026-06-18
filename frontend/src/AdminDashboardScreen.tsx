@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ShieldAlert, TrendingUp, Users, Bot, MessageCircle } from "lucide-react";
+import { ShieldAlert, TrendingUp, Users, Bot } from "lucide-react";
 import { User, Item, getPublicUrl } from "./types";
 
 interface AdminStats {

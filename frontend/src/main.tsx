@@ -3,8 +3,6 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import {
   Bot,
-  CircleOff,
-  ChevronRight,
   Heart,
   HelpCircle,
   Home,
@@ -16,15 +14,13 @@ import {
   Search,
   Send,
   ShieldAlert,
-  ShoppingBag,
   Sparkles,
   Star,
   Store,
   TrendingUp,
   UploadCloud,
   UserCircle2,
-  Users,
-  WalletCards
+  Users
 } from "lucide-react";
 
 // Import modular types and components

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { UploadCloud, ShieldAlert, TrendingUp, PackagePlus, Star } from "lucide-react";
+import { UploadCloud, TrendingUp, PackagePlus, Star } from "lucide-react";
 import { User, Item, Conversation, PersonalStats, getPublicUrl } from "./types";
 
 interface BarterMemberDetail {

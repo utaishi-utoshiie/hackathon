@@ -33,7 +33,7 @@ func (a *app) seedDemo(w http.ResponseWriter, r *http.Request) {
 	_, _ = tx.ExecContext(r.Context(), `
 		INSERT INTO users (name, email, password_hash, role) 
 		VALUES ('Taishi', 'taishi@example.com', ?, 'admin')
-		ON DUPLICATE KEY UPDATE password_hash = ?, role = 'admin'`, 
+		ON DUPLICATE KEY UPDATE password_hash = ?, role = 'admin'`,
 		hashedTaishi, hashedTaishi)
 
 	// 2. Clean up existing demo data (including dependent records first to satisfy Foreign Key constraints)
@@ -56,7 +56,7 @@ func (a *app) seedDemo(w http.ResponseWriter, r *http.Request) {
 	// Delete conversations and messages linked to demo items
 	_, _ = tx.ExecContext(r.Context(), "DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE item_id IN "+demoItemIDs+")")
 	_, _ = tx.ExecContext(r.Context(), "DELETE FROM conversations WHERE item_id IN "+demoItemIDs)
-	
+
 	// Delete item images of demo items
 	_, _ = tx.ExecContext(r.Context(), "DELETE FROM item_images WHERE item_id IN "+demoItemIDs)
 
@@ -147,8 +147,8 @@ func (a *app) seedDemo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "success",
-		"message": "デモデータの自動セットアップ（清算差額調整、3者間Pendingループ、iPhone Active）が完了しました！",
+		"status":          "success",
+		"message":         "デモデータの自動セットアップ（清算差額調整、3者間Pendingループ、iPhone Active）が完了しました！",
 		"negotiateItemId": 9901,
 	})
 }
