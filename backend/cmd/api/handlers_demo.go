@@ -131,7 +131,7 @@ func (a *app) seedDemo(w http.ResponseWriter, r *http.Request) {
 	// [Step 4]: Establish the 3-Party Barter Loop #999 (Current User -> User 2 -> User 3 -> Current User)
 	// -------------------------------------------------------------------------
 	
-	justification := "AさんのSwitch（ゲーム ¥28,000）、Bさん（ガジェット太郎）のiPad（家電 ¥65,000）、Cさん（お洒落はなこ）のコート（ファッション ¥42,000）による循環等価物々交換ループです。商品の参考市場価格の差額を完全に相殺し、全員の純利益が「ちょうど0円（ゼロサム）」に収束するように、Aさんは清算調整金として +¥14,000 を受け取り、Bさんは -¥37,000 を支払い、Cさんは +¥23,000 を受け取ります。決済および物流の整合性が完全に維持されます。"
+	justification := "AさんのSwitch（ゲーム ¥28,000）、Bさん（ガジェット太郎）のiPad（家電 ¥65,000）、Cさん（お洒落はなこ）のコート（ファッション ¥42,000）による循環等価物々交換ループです。商品の参考市場価格の差額を完全に相殺し、全員の純利益が「ちょうど0円（ゼロサム）」に収束するように、Aさんは価値の高いコートを受け取るため差額の -¥14,000 を支払い、Bさんは価値の低いSwitchを受け取るため差額の +¥37,000 を受け取り、Cさんは価値の高いiPadを受け取るため差額の -¥23,000 を支払います。決済および物流の整合性が完全に維持されます。"
 	_, err = databaseTransaction.ExecContext(r.Context(), `
 		INSERT INTO barter_loops (id, status, justification) 
 		VALUES (999, 'pending', ?)`, justification)
@@ -145,17 +145,17 @@ func (a *app) seedDemo(w http.ResponseWriter, r *http.Request) {
 	// Member 1 (Current User, sells Switch to Gadget Taro, wants iPad)
 	_, _ = databaseTransaction.ExecContext(r.Context(), `
 		INSERT INTO barter_loop_members (loop_id, user_id, item_id, receiver_id, cash_adjustment, shipping_status) 
-		VALUES (999, ?, ?, 9992, 14000, 'pending')`, currentUserRecord.ID, itemBID)
+		VALUES (999, ?, ?, 9992, -14000, 'pending')`, currentUserRecord.ID, itemBID)
 
 	// Member 2 (Gadget Taro 9992, sells iPad to Fashion Hanako, wants Coat - pre-accepted)
 	_, _ = databaseTransaction.ExecContext(r.Context(), `
 		INSERT INTO barter_loop_members (loop_id, user_id, item_id, receiver_id, cash_adjustment, shipping_status) 
-		VALUES (999, 9992, ?, 9993, -37000, 'accepted')`, itemCID)
+		VALUES (999, 9992, ?, 9993, 37000, 'accepted')`, itemCID)
 
 	// Member 3 (Fashion Hanako 9993, sells Coat to Current User, wants Switch - pre-accepted)
 	_, _ = databaseTransaction.ExecContext(r.Context(), `
 		INSERT INTO barter_loop_members (loop_id, user_id, item_id, receiver_id, cash_adjustment, shipping_status) 
-		VALUES (999, 9993, ?, ?, 23000, 'accepted')`, itemDID, currentUserRecord.ID)
+		VALUES (999, 9993, ?, ?, -23000, 'accepted')`, itemDID, currentUserRecord.ID)
 
 	// Pre-create an active chat room / DM thread between Current User and Gadget Taro
 	_, _ = databaseTransaction.ExecContext(r.Context(), `
