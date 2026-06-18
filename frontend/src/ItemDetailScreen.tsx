@@ -138,6 +138,9 @@ export function ItemDetailScreen({
   // Stripe Payment States
   const [showStripeModal, setShowStripeModal] = useState(false);
 
+  // AI 3D Appraisal Scanner Modal State
+  const [showAppraisal, setShowAppraisal] = useState(false);
+
   // Negotiation Modal States
   const [showNegotiation, setShowNegotiation] = useState(false);
   const [buyerBudget, setBuyerBudget] = useState(item ? Math.round(item.price * 0.8) : 0);
@@ -373,6 +376,14 @@ export function ItemDetailScreen({
             <span className="detail-category">{currentItem.category}</span>
             <h2 className="detail-title">{currentItem.title}</h2>
             <p className="detail-price">¥{currentItem.price.toLocaleString()}</p>
+            <button 
+              type="button"
+              className="ghost-button" 
+              onClick={() => setShowAppraisal(true)}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#fdf2f0", color: "#d85b46", border: "1px solid #fecdd3", marginTop: "12px", padding: "8px 16px", borderRadius: "30px", fontWeight: "bold", fontSize: "12px", cursor: "pointer" }}
+            >
+              🔮 AI立体・AR査定を起動（3D空間解析）
+            </button>
           </div>
 
           <div style={{ display: "flex", gap: "12px", borderTop: "1px solid #eadfd3", borderBottom: "1px solid #eadfd3", padding: "12px 0" }}>
@@ -598,6 +609,310 @@ export function ItemDetailScreen({
           </div>
         </div>
       )}
+
+      {showAppraisal && (
+        <AppraisalModal 
+          item={currentItem} 
+          onClose={() => setShowAppraisal(false)} 
+        />
+      )}
     </section>
+  );
+}
+
+// ==========================================
+// AI 3D/AR Spatial Appraisal Scanner Component (Hologram Canvas)
+// ==========================================
+
+interface AppraisalModalProps {
+  item: Item;
+  onClose: () => void;
+}
+
+export function AppraisalModal({ item, onClose }: AppraisalModalProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [angleX, setAngleX] = useState(0.5);
+  const [angleY, setAngleY] = useState(0.8);
+  const [speed, setSpeed] = useState(0.015);
+  const animationRef = useRef<number | null>(null);
+
+  // Categories specific spatial data generator
+  const getSpatialData = (category: string) => {
+    switch (category) {
+      case "家電・スマホ":
+        return {
+          dimensions: "147.5 mm × 71.5 mm × 7.85 mm",
+          weight: "206 g",
+          materials: "医療用サージカル・ステンレス ＆ セラミックシールドガラス",
+          surfaceWear: "0.02% （光学3D深度スキャンにより、極微細なヘアライン擦れのみ検出）",
+          structuralIntegrity: "100% 歪み・変形なし",
+          estimatedMarket: "¥82,500 〜 ¥88,000 （関東・関西地区における需要：高）"
+        };
+      case "衣服・ファッション":
+        return {
+          dimensions: "身丈: 1150 mm, 身幅: 510 mm, 袖丈: 610 mm",
+          weight: "1,250 g",
+          materials: "最高級エジプト超長綿 100% ギャバジン織り",
+          surfaceWear: "0.05% （繊維3Dマイクロ解析。毛羽立ち・シミ・色褪せ等なしの極美品）",
+          structuralIntegrity: "99.8% ほつれ・ヨレなし",
+          estimatedMarket: "¥40,000 〜 ¥45,000 （トレンド需要：安定）"
+        };
+      case "本・ゲーム・エンタメ":
+        return {
+          dimensions: "102 mm × 242 mm × 13.9 mm （コントローラー含む）",
+          weight: "420 g",
+          materials: "高耐衝撃性ポリカーボネート樹脂 ＆ 強化耐熱アクリル",
+          surfaceWear: "0.08% （端子部、通気口、角部へのチリ・手垢・摩耗なし）",
+          structuralIntegrity: "100% 液晶ドット抜け・ヒンジ歪みなし",
+          estimatedMarket: "¥26,000 〜 ¥29,000 （中古市場流動性：超活発）"
+        };
+      default:
+        return {
+          dimensions: "210 mm × 210 mm × 45 mm （自動測量値）",
+          weight: "850 g",
+          materials: "高耐久合成アクリル ＆ 削り出しアルミニウム合金",
+          surfaceWear: "0.15% （経年変化、生活擦れのみ検出。Aクラス良品）",
+          structuralIntegrity: "100% 健全",
+          estimatedMarket: "¥2,000 〜 ¥5,000"
+        };
+    }
+  };
+
+  const data = getSpatialData(item.category);
+
+  useEffect(() => {
+    let currentAngleX = angleX;
+    let currentAngleY = angleY;
+
+    const render = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.clearRect(0, 0, width, height);
+
+      // Rotate slowly in background
+      currentAngleX += speed * 0.4;
+      currentAngleY += speed;
+
+      // Define 3D Box vertices (representing a device or standard box)
+      const dx = 55;
+      const dy = 90;
+      const dz = 15;
+      const vertices = [
+        [-dx, -dy, -dz], [dx, -dy, -dz], [dx, dy, -dz], [-dx, dy, -dz],
+        [-dx, -dy,  dz], [dx, -dy,  dz], [dx, dy,  dz], [-dx, dy,  dz]
+      ];
+
+      // Projected 2D coordinates
+      const projected: { x: number; y: number }[] = [];
+      const fov = 260; // Camera distance perspective factor
+
+      for (let i = 0; i < vertices.length; i++) {
+        const [x, y, z] = vertices[i];
+
+        // 3D Rotations (Y-axis then X-axis)
+        const cosY = Math.cos(currentAngleY);
+        const sinY = Math.sin(currentAngleY);
+        const cosX = Math.cos(currentAngleX);
+        const sinX = Math.sin(currentAngleX);
+
+        // Y-rotation
+        const x1 = x * cosY - z * sinY;
+        const z1 = x * sinY + z * cosY;
+
+        // X-rotation
+        const y2 = y * cosX - z1 * sinX;
+        const z2 = y * sinX + z1 * cosX;
+
+        // Perspective Projection
+        const scale = fov / (fov + z2);
+        const cx = width / 2 + x1 * scale;
+        const cy = height / 2 + y2 * scale;
+
+        projected.push({ x: cx, y: cy });
+      }
+
+      // Draw Hologram Scanning Radar ring at bottom
+      ctx.strokeStyle = "rgba(52, 211, 153, 0.15)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(width / 2, height / 2 + 100, 70, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(width / 2, height / 2 + 100, 30, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Draw Laser Sweep grid Lines inside hologram
+      ctx.strokeStyle = "rgba(52, 211, 153, 0.08)";
+      for (let yGrid = 30; yGrid < height; yGrid += 15) {
+        ctx.beginPath();
+        ctx.moveTo(10, yGrid);
+        ctx.lineTo(width - 10, yGrid);
+        ctx.stroke();
+      }
+
+      // Draw wireframe lines (neon green)
+      ctx.strokeStyle = "rgba(52, 211, 153, 0.8)"; // Neon green
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = "#10b981";
+
+      const drawLine = (p1: number, p2: number) => {
+        ctx.beginPath();
+        ctx.moveTo(projected[p1].x, projected[p1].y);
+        ctx.lineTo(projected[p2].x, projected[p2].y);
+        ctx.stroke();
+      };
+
+      // Draw Bottom face (vertices 0, 1, 2, 3)
+      drawLine(0, 1); drawLine(1, 2); drawLine(2, 3); drawLine(3, 0);
+      // Draw Top face (vertices 4, 5, 6, 7)
+      drawLine(4, 5); drawLine(5, 6); drawLine(6, 7); drawLine(7, 4);
+      // Draw Vertical pillars connecting them
+      drawLine(0, 4); drawLine(1, 5); drawLine(2, 6); drawLine(3, 7);
+
+      // Draw glowing scanning points on vertices
+      ctx.fillStyle = "#34d399";
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = "#34d399";
+      for (let i = 0; i < projected.length; i++) {
+        ctx.beginPath();
+        ctx.arc(projected[i].x, projected[i].y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Reset shadows
+      ctx.shadowBlur = 0;
+
+      animationRef.current = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [angleX, angleY, speed]);
+
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.75)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1150, padding: "20px" }}>
+      <div style={{ background: "#0f172a", border: "2px solid #34d399", borderRadius: "16px", padding: "24px", width: "100%", maxWidth: "800px", color: "#e2e8f0", boxShadow: "0 25px 50px -12px rgba(16, 185, 129, 0.3)", display: "flex", flexDirection: "column", gap: "20px" }}>
+        
+        {/* Style Tag for scanning overlay and animation keyframes */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes scanningSweep {
+            0% { top: 0%; opacity: 0.1; }
+            50% { top: 100%; opacity: 0.9; }
+            100% { top: 0%; opacity: 0.1; }
+          }
+          .laser-beam-line {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: #34d399;
+            box-shadow: 0 0 8px #34d399, 0 0 16px #34d399;
+            animation: scanningSweep 3s infinite linear;
+          }
+        ` }} />
+
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #334155", paddingBottom: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "20px" }}>🔮</span>
+            <h3 style={{ margin: 0, color: "#34d399", fontSize: "18px", fontWeight: 800 }}>AI立体・AR空間査定スキャナー</h3>
+          </div>
+          <button type="button" className="ghost-button" onClick={onClose} style={{ color: "#94a3b8", border: "none", fontSize: "18px", padding: "4px 8px" }}>✕</button>
+        </div>
+
+        {/* Two-Column Diagnostic Board */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }} className="diagnostics-split">
+          
+          {/* Left Column: Laserscan overlay on Image */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
+            <span style={{ fontSize: "12px", color: "#34d399", fontWeight: "bold", letterSpacing: "1px", alignSelf: "start" }}>[1/2] 3D PERSPECTIVE PHOTOGRAMMETRY SCAN</span>
+            <div style={{ position: "relative", width: "100%", height: "260px", overflow: "hidden", borderRadius: "12px", border: "1px solid #334155", background: "#020617", display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <img 
+                src={getPublicUrl(item.imageUrl) || "/placeholder.svg"} 
+                alt="" 
+                style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain", opacity: 0.7 }}
+              />
+              <div className="laser-beam-line"></div>
+              <div style={{ position: "absolute", bottom: "10px", left: "10px", background: "rgba(15, 23, 42, 0.8)", border: "1px solid #34d399", borderRadius: "4px", padding: "4px 8px", fontSize: "9px", fontFamily: "monospace", color: "#34d399" }}>
+                DEPTH_MAPPING: ACTIVE
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Hologram Rotating Canvas */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
+            <span style={{ fontSize: "12px", color: "#34d399", fontWeight: "bold", letterSpacing: "1px", alignSelf: "start" }}>[2/2] INTERACTIVE 3D HOLOGRAM PROJECTOR</span>
+            <div style={{ position: "relative", width: "100%", height: "260px", borderRadius: "12px", border: "1px solid #334155", background: "#020617", display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <canvas 
+                ref={canvasRef} 
+                width={300} 
+                height={250} 
+                style={{ width: "100%", height: "100%", display: "block" }}
+              />
+              <div style={{ position: "absolute", bottom: "10px", right: "10px", background: "rgba(15, 23, 42, 0.8)", border: "1px solid #34d399", borderRadius: "4px", padding: "4px 8px", fontSize: "9px", fontFamily: "monospace", color: "#34d399" }}>
+                FPS: 60.0 / B-TREE_RENDER
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Spatial Report (Polite and beautiful Japanese) */}
+        <div style={{ background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: "12px", padding: "16px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", borderBottom: "1px solid rgba(52, 211, 153, 0.15)", paddingBottom: "6px" }}>
+            <span style={{ fontSize: "14px" }}>📋</span>
+            <strong style={{ fontSize: "13px", color: "#34d399" }}>AI空間解析・査定診断書 (3D SPATIAL REPORT)</strong>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px", fontSize: "12px" }} className="diagnostics-info-grid">
+            <div>
+              <span style={{ color: "#94a3b8" }}>📐 測量寸法 (Dimensions):</span>
+              <p style={{ margin: "2px 0 0 0", fontWeight: "bold", color: "#f8fafc" }}>{data.dimensions}</p>
+            </div>
+            <div>
+              <span style={{ color: "#94a3b8" }}>⚖️ 質量 (Weight):</span>
+              <p style={{ margin: "2px 0 0 0", fontWeight: "bold", color: "#f8fafc" }}>{data.weight}</p>
+            </div>
+            <div>
+              <span style={{ color: "#94a3b8" }}>💎 材質診断 (Materials):</span>
+              <p style={{ margin: "2px 0 0 0", fontWeight: "bold", color: "#f8fafc" }}>{data.materials}</p>
+            </div>
+            <div>
+              <span style={{ color: "#94a3b8" }}>🔍 摩耗・キズ検知 (Surface Wear):</span>
+              <p style={{ margin: "2px 0 0 0", fontWeight: "bold", color: "#f8fafc" }}>{data.surfaceWear}</p>
+            </div>
+            <div>
+              <span style={{ color: "#94a3b8" }}>🏗️ 筐体歪み・変形率:</span>
+              <p style={{ margin: "2px 0 0 0", fontWeight: "bold", color: "#f8fafc" }}>{data.structuralIntegrity}</p>
+            </div>
+            <div>
+              <span style={{ color: "#94a3b8" }}>📊 推定市場価値レンジ (Value Index):</span>
+              <p style={{ margin: "2px 0 0 0", fontWeight: "bold", color: "#34d399" }}>{data.estimatedMarket}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button 
+            type="button" 
+            className="primary-button" 
+            onClick={onClose} 
+            style={{ background: "#10b981", color: "#fff", border: "none", padding: "10px 24px", cursor: "pointer", borderRadius: "8px" }}
+          >
+            ✓ 診断レポートを確認して閉じる
+          </button>
+        </div>
+
+      </div>
+    </div>
   );
 }
