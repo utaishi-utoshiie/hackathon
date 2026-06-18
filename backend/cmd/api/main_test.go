@@ -88,3 +88,44 @@ func TestFormatHistory(t *testing.T) {
 		t.Fatalf("unexpected format result: %q", got)
 	}
 }
+
+// Benchmark the GCS Reference string parsing algorithm
+func BenchmarkParseGCSRef(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _, _ = parseGCSRef("gcs://nextmarket/avatars/user-1.jpg")
+	}
+}
+
+// Benchmark the HMAC-SHA256 JWT Token Signing operation (Cryptographic speed)
+func BenchmarkSignToken(b *testing.B) {
+	a := &app{jwtSecret: "test-secret"}
+	u := user{ID: 9999, Name: "BenchmarkUser", Email: "bench@example.com", Role: "user", AvatarURL: "https://example.com/avatar.png"}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = a.signToken(u)
+	}
+}
+
+// Benchmark the Token Verification (signature + json decode parsing)
+func BenchmarkVerifyToken(b *testing.B) {
+	a := &app{jwtSecret: "test-secret"}
+	u := user{ID: 9999, Name: "BenchmarkUser", Email: "bench@example.com", Role: "user", AvatarURL: "https://example.com/avatar.png"}
+	token := a.signToken(u)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = a.verifyToken(token)
+	}
+}
+
+// Benchmark History string construction
+func BenchmarkFormatHistory(b *testing.B) {
+	history := []map[string]any{
+		{"speaker": "buyer", "text": "2200円になりますか？", "price": 2200, "action": "offer"},
+		{"speaker": "seller", "text": "2500円ならいいですよ", "price": 2500, "action": "offer"},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = formatHistory(history)
+	}
+}
+
