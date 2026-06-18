@@ -1,78 +1,116 @@
+/**
+ * @file StripePaymentModal.tsx
+ * @description Stripe Secure Escrow Checkout Simulation UI Component
+ * 3段階エスクロー取引に対応した、セキュアなクレジットカード決済フォームと
+ * 通信遅延・トークン化プロセスの完全モックアップを実装するステートフルモーダルです。
+ */
+
 import React, { useState, useEffect, useRef } from "react";
+
+/**
+ * Stripe 決済モーダルのプロパティ
+ */
+interface StripePaymentModalProps {
+  /** 支払総額（円） */
+  price: number;
+  /** 対象商品のタイトル */
+  title: string;
+  /** モーダルを閉じるコールバック */
+  onClose: () => void;
+  /** 決済成功時に発火する非同期コールバック (エスクロー登録) */
+  onSuccess: () => Promise<void>;
+}
 
 export function StripePaymentModal({
   price,
   title,
   onClose,
   onSuccess
-}: {
-  price: number;
-  title: string;
-  onClose: () => void;
-  onSuccess: () => Promise<void>;
-}) {
+}: StripePaymentModalProps) {
+  // --- クレジットカード入力ステート ---
   const [cardNumber, setCardNumber] = useState("");
   const [expiry, setExpiry] = useState("");
   const [cvc, setCvc] = useState("");
   const [name, setName] = useState("");
+
+  // --- ローディング ＆ 成功ステート ---
   const [paying, setPaying] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const timerRef1 = useRef<any>(null);
-  const timerRef2 = useRef<any>(null);
+  // --- メモリリーク防止タイマー管理リファレンス ---
+  const tokenizationTimerRef = useRef<any>(null);
+  const successAnimationTimerRef = useRef<any>(null);
 
+  /**
+   * コンポーネントのアンマウント（急な離脱）時に、
+   * バックグラウンドで実行中のすべての遅延タイマーを完全に強制終了（サニタイズ）します。
+   */
   useEffect(() => {
     return () => {
-      if (timerRef1.current) clearTimeout(timerRef1.current);
-      if (timerRef2.current) clearTimeout(timerRef2.current);
+      if (tokenizationTimerRef.current) clearTimeout(tokenizationTimerRef.current);
+      if (successAnimationTimerRef.current) clearTimeout(successAnimationTimerRef.current);
     };
   }, []);
 
-  // Format card number with spaces
-  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\s+/g, "").replace(/[^0-9]/gi, "");
-    let matches = value.match(/\d{4,16}/g);
-    let match = (matches && matches[0]) || "";
-    let parts = [];
+  /**
+   * クレジットカード番号入力をリアルタイムで4桁ごとにスペース区切り整形します。
+   * @param event 入力イベント
+   */
+  const handleCardNumberChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = event.target.value.replace(/\s+/g, "").replace(/[^0-9]/gi, "");
+    const matches = rawValue.match(/\d{4,16}/g);
+    const firstMatch = (matches && matches[0]) || "";
+    const formattedParts = [];
 
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
+    for (let i = 0; i < firstMatch.length; i += 4) {
+      formattedParts.push(firstMatch.substring(i, i + 4));
     }
 
-    if (parts.length > 0) {
-      setCardNumber(parts.join(" "));
+    if (formattedParts.length > 0) {
+      setCardNumber(formattedParts.join(" "));
     } else {
-      setCardNumber(value);
+      setCardNumber(rawValue);
     }
   };
 
-  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/[^0-9]/g, "");
-    if (value.length > 2) {
-      setExpiry(value.substring(0, 2) + "/" + value.substring(2, 4));
+  /**
+   * 有効期限入力をリアルタイムで「MM/YY」形式へスラッシュ補完します。
+   * @param event 入力イベント
+   */
+  const handleExpiryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const rawDigits = event.target.value.replace(/[^0-9]/g, "");
+    if (rawDigits.length > 2) {
+      setExpiry(rawDigits.substring(0, 2) + "/" + rawDigits.substring(2, 4));
     } else {
-      setExpiry(value);
+      setExpiry(rawDigits);
     }
   };
 
-  const handlePay = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /**
+   * クレジットカード決済処理シミュレーションを実行します。
+   * @param event フォーム送信イベント
+   */
+  const handlePaySubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!cardNumber || !expiry || !cvc || !name) {
       alert("すべてのクレジットカード情報を入力してください。");
       return;
     }
     setPaying(true);
-    // Simulate secure network tokenization roundtrip (1.8 seconds)
-    timerRef1.current = setTimeout(() => {
+
+    // [手順 1]: Stripe セキュアゲートウェイへのネットワークトークン化リクエストを再現 (1.8秒遅延)
+    tokenizationTimerRef.current = setTimeout(() => {
       setPaying(false);
       setSuccess(true);
-      // Wait for success checkmark animation (1.2 seconds)
-      timerRef2.current = setTimeout(() => {
+
+      // [手順 2]: 支払い完了のチェックマーク演出が終了するまで待機 (1.2秒遅延)
+      successAnimationTimerRef.current = setTimeout(() => {
         onSuccess();
       }, 1200);
     }, 1800);
   };
 
+  // 入力されたカード番号からカードブランド（VISA / Mastercard）を動的に推測
   const isVisa = cardNumber.startsWith("4");
   const isMaster = cardNumber.startsWith("5");
 
@@ -80,17 +118,17 @@ export function StripePaymentModal({
     <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.65)", backdropFilter: "blur(4px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1100, padding: "20px" }}>
       <div style={{ background: "#ffffff", borderRadius: "16px", border: "1px solid #cbd5e1", padding: "32px", width: "100%", maxWidth: "480px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", position: "relative", display: "flex", flexDirection: "column", gap: "24px", color: "#1f2937" }}>
         
-        {/* Header */}
+        {/* モーダルヘッダー */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f1f5f9", paddingBottom: "16px" }}>
           <div>
             <h3 style={{ margin: 0, fontSize: "18px", color: "#0f172a", fontWeight: 700 }}>💳 Stripe 安全クレジットカード決済</h3>
             <small style={{ color: "#64748b" }}>購入商品: {title}</small>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", color: "#94a3b8", cursor: "pointer" }} disabled={paying || success}>✕</button>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", color: "#94a3b8", cursor: "pointer" }} disabled={paying || success}>✕</button>
         </div>
 
         {success ? (
-          /* Success Screen */
+          /* 決済成功画面（チェックマーク＆エスクロー保護の案内） */
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: "16px", textAlign: "center" }}>
             <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "#ecfdf5", border: "2px solid #34d399", display: "flex", alignItems: "center", justifyContent: "center", color: "#34d399", fontSize: "32px", animation: "sparkleGlow 1s infinite alternate" }}>✓</div>
             <strong style={{ fontSize: "20px", color: "#065f46" }}>お支払いが完了しました！</strong>
@@ -100,7 +138,7 @@ export function StripePaymentModal({
             </p>
           </div>
         ) : paying ? (
-          /* Loading Screen */
+          /* ネットワーク処理中ローディング */
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: "16px", textAlign: "center" }}>
             <div className="updating-spinner" style={{ fontSize: "40px" }}>⏳</div>
             <strong style={{ fontSize: "16px", color: "#334155" }}>Stripe Secure Gateway で決済を処理中...</strong>
@@ -110,10 +148,10 @@ export function StripePaymentModal({
             </p>
           </div>
         ) : (
-          /* Input Form */
-          <form onSubmit={handlePay} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          /* カード情報入力フォーム */
+          <form onSubmit={handlePaySubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             
-            {/* Live Card Preview */}
+            {/* 動的カードプレビュー */}
             <div style={{ 
               background: isVisa ? "linear-gradient(135deg, #1e3a8a, #3b82f6)" : isMaster ? "linear-gradient(135deg, #374151, #111827)" : "linear-gradient(135deg, #475569, #1e293b)",
               borderRadius: "12px", 
@@ -147,7 +185,7 @@ export function StripePaymentModal({
               </div>
             </div>
 
-            {/* Inputs */}
+            {/* 入力フィールド群 */}
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "#475569" }}>カード番号</label>
@@ -202,7 +240,7 @@ export function StripePaymentModal({
               </div>
             </div>
 
-            {/* Total Indicator & Submit */}
+            {/* 決済金額表示 & 決済実行ボタン */}
             <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: "16px", marginTop: "8px", display: "flex", flexDirection: "column", gap: "12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: "14px", color: "#475569" }}>支払合計額 (エスクロー保護)</span>
