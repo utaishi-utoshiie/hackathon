@@ -29,6 +29,56 @@ func TestParseGCSRef(t *testing.T) {
 	}
 }
 
+// Test GCS Reference parser robustness against various invalid or structured edge-case inputs
+func TestParseGCSRefEdgeCases(t *testing.T) {
+	cases := []struct {
+		input     string
+		wantB     string
+		wantO     string
+		shouldErr bool
+	}{
+		{"gcs://bucket/object.png", "bucket", "object.png", false},
+		{"gcs://my-bucket/sub/folder/file.jpg", "my-bucket", "sub/folder/file.jpg", false},
+		{"https://example.com/file.png", "", "", true},
+		{"gcs://", "", "", true},
+		{"", "", "", true},
+	}
+
+	for _, tc := range cases {
+		b, o, err := parseGCSRef(tc.input)
+		if tc.shouldErr {
+			if err == nil {
+				t.Errorf("expected error for %q, got nil", tc.input)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("unexpected error for %q: %v", tc.input, err)
+			}
+			if b != tc.wantB || o != tc.wantO {
+				t.Errorf("parseGCSRef(%q) = (%q, %q), want (%q, %q)", tc.input, b, o, tc.wantB, tc.wantO)
+			}
+		}
+	}
+}
+
+// Test Password Hashing algorithm to guarantee that salt/secret works and prevents hash collisions
+func TestHashPasswordStrength(t *testing.T) {
+	appA := &app{jwtSecret: "secret-a"}
+	appB := &app{jwtSecret: "secret-b"}
+	password := "mypassword123"
+
+	hashA1 := appA.hashPassword(password)
+	hashA2 := appA.hashPassword(password)
+	hashB := appB.hashPassword(password)
+
+	if hashA1 != hashA2 {
+		t.Fatal("same password with same secret produced different hashes (flawed deterministic output!)")
+	}
+	if hashA1 == hashB {
+		t.Fatal("same password with different secrets produced the same hash (salt leak or bypass vulnerability!)")
+	}
+}
+
 func TestRequireAdminMiddleware(t *testing.T) {
 	a := &app{jwtSecret: "test-secret"}
 
