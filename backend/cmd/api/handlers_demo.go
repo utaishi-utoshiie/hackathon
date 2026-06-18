@@ -28,6 +28,14 @@ func (a *app) seedDemo(w http.ResponseWriter, r *http.Request) {
 		INSERT IGNORE INTO users (id, name, email, password_hash, role) 
 		VALUES (9993, 'お洒落はなこ', 'fashion@example.com', 'demo_hash_9993', 'user')`)
 
+	// Ensure taishi@example.com exists with password 'example' and role 'admin'
+	hashedTaishi := a.hashPassword("example")
+	_, _ = tx.ExecContext(r.Context(), `
+		INSERT INTO users (name, email, password_hash, role) 
+		VALUES ('Taishi', 'taishi@example.com', ?, 'admin')
+		ON DUPLICATE KEY UPDATE password_hash = ?, role = 'admin'`, 
+		hashedTaishi, hashedTaishi)
+
 	// 2. Clean up existing demo data idempotently for a clean, repeatable run
 	_, _ = tx.ExecContext(r.Context(), "DELETE FROM item_scene_generations WHERE user_id = ? OR user_id = 9992 OR user_id = 9993", u.ID)
 	_, _ = tx.ExecContext(r.Context(), "DELETE FROM barter_loop_members WHERE user_id = ? OR user_id = 9992 OR user_id = 9993", u.ID)
