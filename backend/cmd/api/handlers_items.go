@@ -139,6 +139,16 @@ func (a *app) getItem(w http.ResponseWriter, r *http.Request) {
 		var dummy int
 		err := a.dbHandle().QueryRowContext(r.Context(), "SELECT 1 FROM likes WHERE item_id = ? AND user_id = ?", itemID, u.ID).Scan(&dummy)
 		liked = err == nil
+
+		// Check if there is an agreed negotiated price for this buyer and item
+		var agreedPrice int
+		_ = a.dbHandle().QueryRowContext(r.Context(),
+			"SELECT agreed_price FROM negotiations WHERE item_id = ? AND buyer_id = ? AND status = 'completed' ORDER BY id DESC LIMIT 1",
+			itemID, u.ID,
+		).Scan(&agreedPrice)
+		if agreedPrice > 0 {
+			it.Price = agreedPrice
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -261,7 +271,19 @@ func (a *app) purchaseItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := tx.ExecContext(r.Context(), "INSERT INTO purchases (item_id, buyer_id, seller_id, price, status) VALUES (?, ?, ?, ?, 'paid')", itemID, u.ID, it.SellerID, it.Price); err != nil {
+	// Check if there is an agreed negotiated price for this buyer and item to align the checkout billing
+	var agreedPrice int
+	_ = tx.QueryRowContext(r.Context(),
+		"SELECT agreed_price FROM negotiations WHERE item_id = ? AND buyer_id = ? AND status = 'completed' ORDER BY id DESC LIMIT 1",
+		itemID, u.ID,
+	).Scan(&agreedPrice)
+
+	finalPrice := it.Price
+	if agreedPrice > 0 {
+		finalPrice = agreedPrice
+	}
+
+	if _, err := tx.ExecContext(r.Context(), "INSERT INTO purchases (item_id, buyer_id, seller_id, price, status) VALUES (?, ?, ?, ?, 'paid')", itemID, u.ID, it.SellerID, finalPrice); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create purchase record")
 		return
 	}
