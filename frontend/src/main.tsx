@@ -206,14 +206,23 @@ function App() {
       )}
 
       {user && (
-        <header className="app-header">
-          <h1 className="logo-brand" onClick={() => navigate({ page: "home" })}>
-            <Store size={22} style={{ color: "#d85b46" }} /> Next Market <small style={{ fontSize: "11px", color: "#d85b46", marginLeft: "4px" }}>AI & Escrow</small>
-          </h1>
-          <div className="session-panel">
-            <span className="session-role">{user.role === "admin" ? "🛡️ 管理者" : "👤 一般会員"}</span>
-            <img src={getPublicUrl(user.avatarUrl) || "/placeholder-avatar.svg"} alt="" className="session-avatar" />
-            <span className="session-name">{user.name}</span>
+        <header className="topbar">
+          <div style={{ cursor: "pointer" }} onClick={() => navigate({ page: "home" })}>
+            <p className="eyebrow" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <Store size={14} style={{ color: "#d85b46" }} /> Next Market <small style={{ fontSize: "10px", color: "#d85b46", marginLeft: "4px", background: "#fef3c7", padding: "2px 6px", borderRadius: "4px", fontWeight: "bold" }}>AI & Escrow</small>
+            </p>
+            <h1>売る。見る。話す。</h1>
+          </div>
+          <div className="session-card">
+            {user.role === "admin" && (
+              <button 
+                onClick={() => navigate({ page: "admin", subpage: "stats" })}
+                style={{ background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5", fontSize: "12px", padding: "6px 12px", cursor: "pointer" }}
+              >
+                🛡️ 管理画面
+              </button>
+            )}
+            <IconLabel icon={UserCircle2} label={user?.name ?? "User"} value={user?.email?.split("@")[0] ?? ""} className="session-badge" />
             <button className="ghost-button" onClick={logout}>
               <IconLabel icon={LogOut} label="終了" />
             </button>
