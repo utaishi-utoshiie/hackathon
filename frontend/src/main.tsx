@@ -242,6 +242,12 @@ function App() {
     if (token) headers.set("Authorization", `Bearer ${token}`);
     const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
     
+    // Auto-logout on 401 Unauthorized (expired or invalid token)
+    if (response.status === 401 && path !== "/auth/login" && path !== "/auth/register" && path !== "/auth/reset-demo") {
+      logout();
+      throw new Error("セッションの有効期限が切れました。もう一度ログインしてください。");
+    }
+    
     let data: any;
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
