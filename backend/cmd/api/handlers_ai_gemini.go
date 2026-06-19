@@ -34,7 +34,7 @@ type geminiInlineData struct {
 }
 
 type geminiTool struct {
-	GoogleSearch *struct{} `json:"googleSearch,omitempty"`
+	GoogleSearch *struct{} `json:"google_search,omitempty"`
 }
 
 type geminiGenConfig struct {
@@ -74,9 +74,6 @@ func (a *app) callGeminiVision(ctx context.Context, imageBase64, mimeType, promp
 				{Text: prompt},
 			},
 		}},
-		GenerationConfig: &geminiGenConfig{
-			ResponseMimeType: "application/json",
-		},
 	}
 
 	return a.doGeminiRequest(ctx, apiKey, reqBody)

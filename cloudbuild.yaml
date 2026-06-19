@@ -24,7 +24,7 @@ steps:
       - --service-account
       - ${_RUNTIME_SERVICE_ACCOUNT}
       - --update-env-vars
-      - GCS_BUCKET=${_UPLOADS_BUCKET}
+      - GCS_BUCKET=${_UPLOADS_BUCKET},GEMINI_API_KEY=${_GEMINI_API_KEY},GEMINI_MODEL=${_GEMINI_MODEL},OPENAI_API_KEY=${_OPENAI_API_KEY}
       - --add-cloudsql-instances
       - ${_CLOUD_SQL_CONNECTION}
       - --quiet
@@ -42,3 +42,6 @@ substitutions:
   _RUNTIME_SERVICE_ACCOUNT: next-market-run@${PROJECT_ID}.iam.gserviceaccount.com
   _UPLOADS_BUCKET: ${PROJECT_ID}-next-market-uploads
   _CLOUD_SQL_CONNECTION: ${PROJECT_ID}:asia-northeast1:next-market-mysql
+  _GEMINI_API_KEY: ""
+  _GEMINI_MODEL: gemini-2.5-flash
+  _OPENAI_API_KEY: ""
