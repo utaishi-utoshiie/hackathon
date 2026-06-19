@@ -48,6 +48,7 @@
 - Removed the obsolete GCS private-key secret flow; Cloud Run now writes to GCS exclusively through Application Default Credentials and bucket IAM.
 - Fixed profile-photo updates returning no session payload, which previously replaced the browser token with `undefined` and triggered the login guard.
 - Persisted the uploaded `avatarPath`, returned a freshly signed token/user pair, and kept users on My Page after a successful photo update.
+- Added defensive session restoration that removes legacy `"undefined"`/invalid localStorage values instead of crashing the entire React app before first render.
 
 ### 2026-06-17
 

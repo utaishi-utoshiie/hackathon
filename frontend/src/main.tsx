@@ -61,13 +61,41 @@ const PRIMARY_NAV: NavItem[] = [
   { page: "help", label: "ヘルプ", icon: HelpCircle }
 ];
 
+function clearStoredSession() {
+  try {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
+}
+
+function readStoredSession(): { token: string; user: User | null } {
+  try {
+    const token = localStorage.getItem("token") ?? "";
+    const rawUser = localStorage.getItem("user");
+    if (!token || token === "undefined" || token === "null" || !rawUser || rawUser === "undefined" || rawUser === "null") {
+      clearStoredSession();
+      return { token: "", user: null };
+    }
+
+    const user = JSON.parse(rawUser) as Partial<User> | null;
+    if (!user || typeof user.id !== "number" || typeof user.email !== "string" || typeof user.role !== "string") {
+      clearStoredSession();
+      return { token: "", user: null };
+    }
+    return { token, user: user as User };
+  } catch {
+    clearStoredSession();
+    return { token: "", user: null };
+  }
+}
+
 function App() {
   // --- 認証 ＆ ルーティングステート ---
-  const [token, setToken] = useState(localStorage.getItem("token") ?? "");
-  const [user, setUser] = useState<User | null>(() => {
-    const raw = localStorage.getItem("user");
-    return raw ? (JSON.parse(raw) as User) : null;
-  });
+  const [initialSession] = useState(readStoredSession);
+  const [token, setToken] = useState(initialSession.token);
+  const [user, setUser] = useState<User | null>(initialSession.user);
   const [route, setRoute] = useState<Route>(readRoute);
   const [notice, setNotice] = useState("");
 
@@ -294,8 +322,7 @@ function App() {
   const logout = () => {
     setToken("");
     setUser(null);
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearStoredSession();
     setRoute({ page: "auth" });
   };
 
