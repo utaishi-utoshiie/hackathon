@@ -6,6 +6,7 @@
 import React, { useState, FormEvent } from "react";
 import { Sparkles, UploadCloud } from "lucide-react";
 import { Item, CATEGORIES } from "./types";
+import { PhotoAppraiser, AppraiseResult } from "./PhotoAppraiser";
 
 interface SellScreenProps {
   api: <T>(path: string, options?: RequestInit) => Promise<T>;
@@ -18,6 +19,7 @@ export function SellScreen({
 }: SellScreenProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [appraiserApplied, setAppraiserApplied] = useState(false);
   const [category, setCategory] = useState("衣服・ファッション");
   const [price, setPrice] = useState(3000);
   const [minPrice, setMinPrice] = useState(2000);
@@ -28,6 +30,24 @@ export function SellScreen({
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestedMsg, setSuggestedMsg] = useState("");
+
+  function handleAppraiseApply(result: AppraiseResult) {
+    setTitle(result.title);
+    if (CATEGORIES.includes(result.category)) {
+      setCategory(result.category);
+    }
+    setPrice(result.price);
+    setMinPrice(result.minPrice);
+    const descLines = [
+      result.searchSummary ? `【相場情報】${result.searchSummary}` : "",
+      result.reason ? `【査定根拠】${result.reason}` : "",
+    ].filter(Boolean);
+    if (descLines.length > 0) {
+      setDescription(descLines.join("\n\n"));
+    }
+    setAppraiserApplied(true);
+    setSuggestedMsg(`📷 AI写真査定完了: 推奨価格 ¥${result.price.toLocaleString()} (${result.reason})`);
+  }
 
   async function suggestPriceAndDescribe() {
     if (!title) {
@@ -112,6 +132,17 @@ export function SellScreen({
       </div>
 
       <form onSubmit={submit} className="panel form-panel" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* AI写真査定 */}
+        <div className="input-group">
+          <label>写真で商品を自動識別（AI査定）</label>
+          <PhotoAppraiser api={api} onApply={handleAppraiseApply} />
+          {appraiserApplied && (
+            <p className="notice" style={{ margin: "6px 0 0 0", fontSize: "12px", color: "#059669" }}>
+              ✓ AI査定結果をフォームに反映しました。内容を確認・修正してから出品してください。
+            </p>
+          )}
+        </div>
+
         <div className="input-group">
           <label>商品名</label>
           <input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="ルイヴィトンの折りたたみ財布" />

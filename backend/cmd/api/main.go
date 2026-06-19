@@ -183,6 +183,7 @@ func main() {
 	mux.HandleFunc("POST /api/ai/generate-description", a.requireAuth(a.generateDescription))
 	mux.HandleFunc("POST /api/ai/ask", a.requireAuth(a.askAI))
 	mux.HandleFunc("POST /api/ai/suggest-price", a.requireAuth(a.suggestPrice))
+	mux.HandleFunc("POST /api/ai/photo-appraise", a.requireAuth(a.photoAppraise))
 	mux.HandleFunc("GET /api/items/{id}/ai-scene", a.requireAuth(a.getLatestItemScene))
 	mux.HandleFunc("POST /api/items/{id}/ai-scene", a.requireAuth(a.generateItemScene))
 	mux.HandleFunc("POST /api/items/{id}/ai-video", a.requireAuth(a.generateSceneVideo))
