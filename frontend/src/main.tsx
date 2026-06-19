@@ -304,6 +304,31 @@ function App() {
     void loadMyItems();
   }, [token]);
 
+  // 🔔 SaaS-Free Browser Tab Notification Blinking (新着通知時のタブ点滅効果)
+  useEffect(() => {
+    if (!notice) return;
+    let isBlink = false;
+    const originalTitle = document.title;
+    const interval = setInterval(() => {
+      isBlink = !isBlink;
+      document.title = isBlink ? "🔔 新着通知あり！ - next market" : originalTitle;
+    }, 1000);
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        clearInterval(interval);
+        document.title = originalTitle;
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.title = originalTitle;
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [notice]);
+
   const saveSession = (nextToken: string, nextUser: User) => {
     if (!nextToken || !nextUser?.id) {
       throw new Error("セッション更新の応答が不正です。もう一度お試しください");

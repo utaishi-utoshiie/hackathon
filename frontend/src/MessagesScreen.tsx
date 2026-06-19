@@ -195,6 +195,57 @@ export function MessagesScreen({
                   🎉 この取引は完了しました！ありがとうございました。
                 </p>
               )}
+
+              {/* 🚚 3-STAGE LOGISTICS TIMELINE TRACKER (SaaS-Free UX Polish) */}
+              <div style={{ background: "#ffffff", border: "1px solid #eadfd3", borderRadius: "12px", padding: "16px", marginTop: "12px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative" }}>
+                  {/* Line behind steps */}
+                  <div style={{ position: "absolute", top: "14px", left: "10%", right: "10%", height: "2px", background: "#cbd5e1", zIndex: 1 }} />
+                  <div style={{ position: "absolute", top: "14px", left: "10%", width: selectedConversation.purchaseStatus === "paid" ? "0%" : selectedConversation.purchaseStatus === "shipped" ? "50%" : "100%", height: "2px", background: "#275643", transition: "width 0.5s ease", zIndex: 2 }} />
+
+                  {/* Step 1: Paid (Escrowed) */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3 }}>
+                    <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "#275643", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold" }}>🔒</div>
+                    <span style={{ fontSize: "11px", fontWeight: "bold", marginTop: "4px", color: "#275643" }}>1. 決済完了</span>
+                  </div>
+
+                  {/* Step 2: Shipped (In Transit) */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3 }}>
+                    <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: (selectedConversation.purchaseStatus === "shipped" || selectedConversation.purchaseStatus === "completed") ? "#d85b46" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", transition: "background 0.3s" }}>🚚</div>
+                    <span style={{ fontSize: "11px", fontWeight: "bold", marginTop: "4px", color: (selectedConversation.purchaseStatus === "shipped" || selectedConversation.purchaseStatus === "completed") ? "#d85b46" : "#64748b" }}>2. 配送中</span>
+                  </div>
+
+                  {/* Step 3: Completed (Delivered) */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3 }}>
+                    <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: selectedConversation.purchaseStatus === "completed" ? "#10b981" : "#cbd5e1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", transition: "background 0.3s" }}>🤝</div>
+                    <span style={{ fontSize: "11px", fontWeight: "bold", marginTop: "4px", color: selectedConversation.purchaseStatus === "completed" ? "#10b981" : "#64748b" }}>3. 取引完了</span>
+                  </div>
+                </div>
+
+                {/* Dynamic Dispatcher Log */}
+                <div style={{ background: "#faf8f5", border: "1px solid #eadfd3", borderRadius: "8px", padding: "10px", fontSize: "11px", color: "#475569" }}>
+                  <span style={{ fontWeight: "bold", color: "#1e293b", display: "block", marginBottom: "4px" }}>📋 配送ステータス履歴 (ライブ追跡):</span>
+                  {selectedConversation.purchaseStatus === "paid" && (
+                    <p style={{ margin: 0, lineHeight: "1.4" }}>
+                      ・[大田配送センター] 商品の発送待ち。代金はStripeエスクロー金庫にて安全に保護されています。<br />
+                      ・[事務局] 出品者による梱包・発送通知をお待ちください。
+                    </p>
+                  )}
+                  {selectedConversation.purchaseStatus === "shipped" && (
+                    <p style={{ margin: 0, lineHeight: "1.4" }}>
+                      ・[羽田クロノゲート] 輸送中（お近くの配達センターへ向かっています）。<br />
+                      ・[大田配送センター] 荷物の受付、発送引受手続きを完了しました。<br />
+                      ・[事務局] 荷物が届き次第、内容物を確認して受取評価を送信してください。
+                    </p>
+                  )}
+                  {selectedConversation.purchaseStatus === "completed" && (
+                    <p style={{ margin: 0, lineHeight: "1.4" }}>
+                      ・[大田配送センター] 配達完了。ご指定の場所（置き配/手渡し）へ配送されました。<br />
+                      ・[事務局] 相互評価完了により、エスクロー金庫から売上金が出品者へ全額リリースされました。
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
           <div className="message-list">
