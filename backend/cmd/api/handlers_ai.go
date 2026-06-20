@@ -133,7 +133,9 @@ func (a *app) getLatestItemScene(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scene.ImageUrl = gcsPathToPublicURL(scene.ImagePath)
-	if scene.VideoPath != "" && scene.VideoPath != "simulated" {
+	if scene.VideoPath == "simulated" {
+		scene.VideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+	} else if scene.VideoPath != "" {
 		scene.VideoUrl = gcsPathToPublicURL(scene.VideoPath)
 	}
 
@@ -148,6 +150,38 @@ func (a *app) generateItemScene(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db := a.dbHandle()
+
+	// 既に生成済みの画像があるか確認（最新の生成成功物を再利用して無駄なAPI再生成を回避）
+	var existingImagePath, existingPrompt, existingVideoPath string
+	cacheErr := db.QueryRowContext(r.Context(), 
+		"SELECT image_path, prompt, COALESCE(video_path, '') FROM item_scene_generations WHERE user_id = ? AND item_id = ? AND image_path IS NOT NULL AND image_path != '' ORDER BY created_at DESC LIMIT 1",
+		u.ID, itemID,
+	).Scan(&existingImagePath, &existingPrompt, &existingVideoPath)
+
+	if cacheErr == nil {
+		log.Printf("Found cached generated scene for item=%d and user=%d. Returning directly.", itemID, u.ID)
+		publicURL := gcsPathToPublicURL(existingImagePath)
+		
+		var videoURL string
+		if existingVideoPath == "simulated" {
+			videoURL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+		} else if existingVideoPath != "" {
+			videoURL = gcsPathToPublicURL(existingVideoPath)
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"scene": ItemScene{
+				UserID:    u.ID,
+				ItemID:    itemID,
+				ImageUrl:  publicURL,
+				Prompt:    existingPrompt,
+				VideoPath: existingVideoPath,
+				VideoUrl:  videoURL,
+			},
+		})
+		return
+	}
+
 	var storedUser struct {
 		Name      string
 		AvatarURL string
@@ -284,15 +318,47 @@ func (a *app) generateSceneVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Fetch the latest generated scene image for this item and user
+	// 既に生成済みの動画情報（本物アセット、または simulated）が存在するか確認（再利用）
+	var existingVideoPath string
+	cacheErr := a.dbHandle().QueryRowContext(r.Context(), `
+		SELECT COALESCE(video_path, '') 
+		FROM item_scene_generations 
+		WHERE user_id = ? AND item_id = ? AND video_path IS NOT NULL AND video_path != '' 
+		ORDER BY created_at DESC 
+		LIMIT 1`, u.ID, itemID,
+	).Scan(&existingVideoPath)
+
+	if cacheErr == nil && existingVideoPath != "" {
+		if existingVideoPath == "simulated" {
+			log.Printf("Found cached simulated video status for item=%d and user=%d. Returning directly.", itemID, u.ID)
+			writeJSON(w, http.StatusOK, map[string]any{
+				"status":    "simulated",
+				"videoUrl":  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+				"simulated": true,
+			})
+			return
+		}
+
+		log.Printf("Found cached generated video for item=%d and user=%d. Returning directly.", itemID, u.ID)
+		videoURL := gcsPathToPublicURL(existingVideoPath)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":    "completed",
+			"videoUrl":  videoURL,
+			"simulated": false,
+		})
+		return
+	}
+
+	// 1. Fetch the latest generated scene image and its ID for this item and user
+	var id int64
 	var imagePath string
 	err := a.dbHandle().QueryRowContext(r.Context(), `
-		SELECT image_path 
+		SELECT id, image_path 
 		FROM item_scene_generations 
 		WHERE user_id = ? AND item_id = ? 
 		ORDER BY created_at DESC 
 		LIMIT 1`, u.ID, itemID,
-	).Scan(&imagePath)
+	).Scan(&id, &imagePath)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "AI使用風景画像がまだ生成されていません。先に生成してください。")
 		return
@@ -332,7 +398,7 @@ func (a *app) generateSceneVideo(w http.ResponseWriter, r *http.Request) {
 			_, _ = a.dbHandle().ExecContext(r.Context(), `
 				UPDATE item_scene_generations 
 				SET video_path = 'simulated' 
-				WHERE user_id = ? AND item_id = ?`, u.ID, itemID)
+				WHERE id = ?`, id)
 
 			writeJSON(w, http.StatusOK, map[string]any{
 				"status":    "simulated",
@@ -375,7 +441,7 @@ func (a *app) generateSceneVideo(w http.ResponseWriter, r *http.Request) {
 		vResp, err := client.Do(vReq)
 		if err != nil {
 			log.Printf("Vertex AI Video call failed: %v. Falling back to simulation.", err)
-			_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE item_scene_generations SET video_path = 'simulated' WHERE user_id = ? AND item_id = ?", u.ID, itemID)
+			_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE item_scene_generations SET video_path = 'simulated' WHERE id = ?", id)
 			writeJSON(w, http.StatusOK, map[string]any{
 				"status":    "simulated",
 				"videoUrl":  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
@@ -388,7 +454,7 @@ func (a *app) generateSceneVideo(w http.ResponseWriter, r *http.Request) {
 		vRespBody, _ := io.ReadAll(vResp.Body)
 		if vResp.StatusCode >= 300 {
 			log.Printf("Vertex AI Video API returned error %d: %s. Falling back to simulation.", vResp.StatusCode, string(vRespBody))
-			_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE item_scene_generations SET video_path = 'simulated' WHERE user_id = ? AND item_id = ?", u.ID, itemID)
+			_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE item_scene_generations SET video_path = 'simulated' WHERE id = ?", id)
 			writeJSON(w, http.StatusOK, map[string]any{
 				"status":    "simulated",
 				"videoUrl":  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
@@ -404,7 +470,7 @@ func (a *app) generateSceneVideo(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := json.Unmarshal(vRespBody, &vertexRes); err != nil || len(vertexRes.Predictions) == 0 {
 			log.Printf("Vertex AI Video JSON unmarshal failed. Falling back to simulation.")
-			_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE item_scene_generations SET video_path = 'simulated' WHERE user_id = ? AND item_id = ?", u.ID, itemID)
+			_, _ = a.dbHandle().ExecContext(r.Context(), "UPDATE item_scene_generations SET video_path = 'simulated' WHERE id = ?", id)
 			writeJSON(w, http.StatusOK, map[string]any{
 				"status":    "simulated",
 				"videoUrl":  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
@@ -432,7 +498,7 @@ func (a *app) generateSceneVideo(w http.ResponseWriter, r *http.Request) {
 	_, err = a.dbHandle().ExecContext(r.Context(), `
 		UPDATE item_scene_generations 
 		SET video_path = ? 
-		WHERE user_id = ? AND item_id = ?`, objectPath, u.ID, itemID)
+		WHERE id = ?`, objectPath, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update video record")
 		return

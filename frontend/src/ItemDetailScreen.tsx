@@ -246,6 +246,14 @@ export function ItemDetailScreen({
     try {
       const data = await api<{ scene: ItemScene | null }>(`/items/${currentItem.id}/ai-scene`);
       setScene(data.scene);
+      if (data.scene && data.scene.videoUrl) {
+        setVideoUrl(data.scene.videoUrl);
+        setVideoSimulated(data.scene.videoPath === "simulated");
+        setIsPlayingVideo(true);
+      } else {
+        setVideoUrl("");
+        setIsPlayingVideo(false);
+      }
     } catch (err) {
       setSceneError(cleanErrorMessage(err, "AI画像の読み込みに失敗しました"));
     }
@@ -274,8 +282,15 @@ export function ItemDetailScreen({
     try {
       const data = await api<{ scene: ItemScene }>(`/items/${currentItem.id}/ai-scene`, { method: "POST" });
       setScene(data.scene);
-      setIsPlayingVideo(false);
-      setVideoUrl("");
+      if (data.scene && data.scene.videoUrl) {
+        setVideoUrl(data.scene.videoUrl);
+        setVideoSimulated(data.scene.videoPath === "simulated");
+        setIsPlayingVideo(true);
+        onNotice("キャッシュされた生成成功アセット（画像・動画）を即時ロードしました！");
+      } else {
+        setIsPlayingVideo(false);
+        setVideoUrl("");
+      }
     } catch (err) {
       setSceneError(cleanErrorMessage(err, "AI画像の生成に失敗しました"));
     } finally {
