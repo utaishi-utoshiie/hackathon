@@ -580,7 +580,6 @@ func (a *app) callOpenAIImageGenerate(ctx context.Context, prompt string, upload
 	_ = writer.WriteField("prompt", prompt)
 	_ = writer.WriteField("n", "1")
 	_ = writer.WriteField("size", "1024x1024")
-	_ = writer.WriteField("response_format", "b64_json")
 
 	// 複数画像を image[] フィールドで送信（gpt-image-2 の複数画像合成形式）
 	for _, up := range uploads {
@@ -612,16 +611,42 @@ func (a *app) callOpenAIImageGenerate(ctx context.Context, prompt string, upload
 
 	var res struct {
 		Data []struct {
+			URL     string `json:"url"`
 			B64JSON string `json:"b64_json"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(respBody, &res); err != nil {
 		return nil, err
 	}
-	if len(res.Data) == 0 || res.Data[0].B64JSON == "" {
+	if len(res.Data) == 0 {
 		return nil, errors.New("gpt-image-2 returned no image data")
 	}
-	return base64.StdEncoding.DecodeString(res.Data[0].B64JSON)
+
+	// b64_json があればそれを使用し、なければ URL から画像をダウンロードする
+	if res.Data[0].B64JSON != "" {
+		return base64.StdEncoding.DecodeString(res.Data[0].B64JSON)
+	}
+
+	if res.Data[0].URL == "" {
+		return nil, errors.New("gpt-image-2 returned neither url nor b64_json")
+	}
+
+	imgReq, err := http.NewRequestWithContext(ctx, http.MethodGet, res.Data[0].URL, nil)
+	if err != nil {
+		return nil, err
+	}
+	imgResp, err := http.DefaultClient.Do(imgReq)
+	if err != nil {
+		return nil, err
+	}
+	defer imgResp.Body.Close()
+
+	if imgResp.StatusCode >= 300 {
+		imgErrBody, _ := io.ReadAll(imgResp.Body)
+		return nil, fmt.Errorf("failed to download image from gpt-image-2 URL %d: %s", imgResp.StatusCode, string(imgErrBody))
+	}
+
+	return io.ReadAll(imgResp.Body)
 }
 
 
