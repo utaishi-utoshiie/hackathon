@@ -22,9 +22,10 @@ import (
 	"sync"
 	"time"
 
+	"next-market/backend/migrations"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
-	"next-market/backend/migrations"
 )
 
 func init() {
@@ -573,10 +574,11 @@ func (a *app) callOpenAIImageGenerate(ctx context.Context, prompt string) ([]byt
 	}
 
 	reqBody, _ := json.Marshal(map[string]any{
-		"model":  "gpt-image-1",
-		"prompt": prompt,
-		"n":      1,
-		"size":   "1024x1024",
+		"model":           "gpt-image-2",
+		"prompt":          prompt,
+		"n":               1,
+		"size":            "1024x1024",
+		"response_format": "b64_json",
 	})
 
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/images/generations", bytes.NewReader(reqBody))
@@ -591,7 +593,7 @@ func (a *app) callOpenAIImageGenerate(ctx context.Context, prompt string) ([]byt
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("gpt-image-1 API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("gpt-image-2 API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var res struct {
