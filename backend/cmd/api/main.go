@@ -573,7 +573,7 @@ func (a *app) callOpenAIImageGenerate(ctx context.Context, prompt string) ([]byt
 	}
 
 	reqBody, _ := json.Marshal(map[string]any{
-		"model":  "dall-e-3",
+		"model":  "gpt-image-1",
 		"prompt": prompt,
 		"n":      1,
 		"size":   "1024x1024",
@@ -591,7 +591,7 @@ func (a *app) callOpenAIImageGenerate(ctx context.Context, prompt string) ([]byt
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("DALL-E 3 API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("gpt-image-1 API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var res struct {
