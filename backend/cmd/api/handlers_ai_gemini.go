@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -286,6 +287,94 @@ func extractTaggedJSON(s string) string {
 		return strings.TrimSpace(s[start+len(openTag) : end])
 	}
 	return extractJSON(s)
+}
+
+// callGeminiImageGenerate は複数の入力画像とプロンプトから Gemini で合成画像を生成します。
+// OpenAI の /v1/images/edits の代替として使用します。
+func (a *app) callGeminiImageGenerate(ctx context.Context, prompt string, uploads []imageUpload) ([]byte, string, error) {
+	apiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+	if apiKey == "" {
+		return nil, "", fmt.Errorf("missing GEMINI_API_KEY")
+	}
+
+	// 入力画像を parts として組み立てる
+	var parts []map[string]any
+	for _, up := range uploads {
+		parts = append(parts, map[string]any{
+			"inlineData": map[string]string{
+				"mimeType": up.ContentType,
+				"data":     base64.StdEncoding.EncodeToString(up.Bytes),
+			},
+		})
+	}
+	parts = append(parts, map[string]any{"text": prompt})
+
+	reqBody := map[string]any{
+		"contents": []any{
+			map[string]any{"parts": parts},
+		},
+		"generationConfig": map[string]any{
+			"responseModalities": []string{"IMAGE"},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// 画像生成は gemini-2.0-flash-exp を使用（image output 対応モデル）
+	endpoint := fmt.Sprintf(
+		"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=%s",
+		apiKey,
+	)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return nil, "", fmt.Errorf("Gemini Image API error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var gemRes struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text       string `json:"text"`
+					InlineData *struct {
+						MimeType string `json:"mimeType"`
+						Data     string `json:"data"`
+					} `json:"inlineData"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
+	if err := json.Unmarshal(respBody, &gemRes); err != nil {
+		return nil, "", fmt.Errorf("failed to parse Gemini image response: %w", err)
+	}
+	if len(gemRes.Candidates) == 0 {
+		return nil, "", fmt.Errorf("Gemini returned no image candidates")
+	}
+
+	for _, part := range gemRes.Candidates[0].Content.Parts {
+		if part.InlineData != nil {
+			imgBytes, err := base64.StdEncoding.DecodeString(part.InlineData.Data)
+			return imgBytes, part.InlineData.MimeType, err
+		}
+	}
+
+	return nil, "", fmt.Errorf("Gemini returned no image data in response")
 }
 
 // defaultPrice はカテゴリーと状態に基づくフォールバック価格を返します。

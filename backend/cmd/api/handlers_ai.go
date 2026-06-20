@@ -198,7 +198,8 @@ func (a *app) generateItemScene(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prompt := itemScenePrompt(storedUser.Name, it)
-	generatedBytes, err := a.callOpenAIImageEdit(r.Context(), prompt, []imageUpload{
+	// Gemini 2.0 Flash Exp で合成画像生成（OpenAI /v1/images/edits は mask 形式の誤用で動作しなかったため切り替え）
+	generatedBytes, generatedMIME, err := a.callGeminiImageGenerate(r.Context(), prompt, []imageUpload{
 		{Filename: "avatar.jpg", ContentType: avatarType, Bytes: avatarBytes},
 		{Filename: "item.jpg", ContentType: itemType, Bytes: itemBytes},
 	})
@@ -207,25 +208,28 @@ func (a *app) generateItemScene(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	objectPath, sceneURL, err := saveGeneratedImageToGCS("generated-scenes", fmt.Sprintf("item-%d-user-%d.jpeg", itemID, u.ID), "image/jpeg", generatedBytes)
+	if generatedMIME == "" {
+		generatedMIME = "image/png"
+	}
+	result, err := a.imageStore.Save(r.Context(), "scene", generatedMIME, generatedBytes)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "AI画像の保存に失敗しました")
 		return
 	}
 	if _, err := a.dbHandle().ExecContext(r.Context(),
 		"INSERT INTO item_scene_generations (user_id, item_id, image_path, prompt) VALUES (?, ?, ?, ?)",
-		u.ID, itemID, objectPath, prompt,
+		u.ID, itemID, result.ObjectPath, prompt,
 	); err != nil {
 		writeError(w, http.StatusInternalServerError, "generated scene could not be recorded")
 		return
 	}
 
-	a.saveAI(r.Context(), u.ID, &itemID, "item_scene", prompt, objectPath)
+	a.saveAI(r.Context(), u.ID, &itemID, "item_scene", prompt, result.ObjectPath)
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"scene": ItemScene{
 			UserID:   u.ID,
 			ItemID:   itemID,
-			ImageUrl: sceneURL,
+			ImageUrl: result.PublicURL,
 			Prompt:   prompt,
 		},
 	})

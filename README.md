@@ -1,3 +1,4 @@
+# 要件定義書
 テーマ
 「次世代フリマアプリの開発」
 * 基本的なフリマアプリ機能の実装
@@ -81,20 +82,204 @@ Web開発
 
 ---
 
-# 🏆 Next Market — 次世代AIフリマプラットフォーム (製品ドキュメント)
+# 機能一覧
 
 Next Market は、Go（バックエンド）と React / Vite / TypeScript（フロントエンド）、および OpenAI API / Google Cloud サーバーレス環境（Cloud Run & Cloud SQL）を極限まで融合させ、数々の独創的な次世代フリマ体験を「完全実動」として実装した、最高峰のWebアプリケーションです。
 
 ## 📁 ディレクトリ構造 (疎結合モノレポ・アーキテクチャ)
 
-*   `docs/`: UI/UX、DB、API、およびトラブルシューティングガイドブック
-*   `backend/`: Go 言語による REST API サーバー
-    *   `cmd/api/`: 薄いルーティング・ミドルウェアエントリーポイント（`main.go`, `middleware.go`）
-    *   `migrations/`: Goose ＋ `go:embed` による自己完結型SQLマイグレーション定義
-*   `frontend/`: React 19 / Vite / TypeScript によるシングルページアプリケーション(SPA)
-    *   `src/components/`: 自律ツアーHUDや共通決済等の共有コンポーネント
-    *   `src/screens/`: 各画面に特化した疎結合モジュール画面 (Auth, Home, Sell, Details, DMs, MyPage, Admin, Help)
-*   `docker-compose.yaml`: ローカル開発用MySQL環境定義
+*   `backend/cmd/api/`: Go言語 REST API サーバー（モノリシック、高速応答）
+    *   **ハンドラー群** - 機能別に細分化
+        *   `handlers_auth.go`: ユーザー登録・ログイン・プロフィール更新・パスワード変更
+        *   `handlers_items.go`: 商品一覧・詳細・作成・編集・削除・ステータス管理
+        *   `handlers_chats.go`: DM会話・メッセージ送受信
+        *   `handlers_ai.go`: AI商品説明生成・Q&A応答・AI価格提案・オートネゴシエーション
+        *   `handlers_ai_gemini.go`: Gemini API連携（複数AI対応）
+        *   `handlers_barter.go`: 物々交換マッチング・ループ検出・清算計算
+        *   `handlers_admin.go`: 管理者ダッシュボード・ユーザー管理・モデレーション
+        *   `handlers_demo.go`: デモ用リセット機能
+    *   `main.go`: サーバー起動・DB接続・ルーティング・JWT認証・ミドルウェア
+    *   `middleware.go`: 認証・認可・エラーハンドリング・JSON I/O
+    *   `upload.go`: マルチパート画像アップロード・ローカル/GCS永続化（切り替え可能）
+    *   `main_test.go`, `upload_test.go`: Go単体テスト
+
+*   `backend/migrations/`: Goose + go:embed による自己完結型SQLマイグレーション
+    *   `0001_init.sql`: コア テーブル定義（users, items, conversations, messages, purchases, likes, reviews, AI log）
+    *   `0002_add_negotiations_and_barter_tables.sql`: AIネゴシエーション・物々交換 テーブル追加
+    *   `0003_add_covering_indexes.sql`: パフォーマンス最適化インデックス（冪等管理）
+
+*   `frontend/src/`: React 19 / TypeScript / CSS による SPA（シングルページアプリケーション）
+    *   **主要画面**（各ファイルは 200～800 行の独立モジュール）
+        *   `AuthScreen.tsx`: ユーザー登録・ログイン・デモパスワード無効化（開発用）
+        *   `HomeScreen.tsx`: 商品一覧・キーワード検索・カテゴリー/価格フィルター
+        *   `SellScreen.tsx`: 新規商品出品・AI説明生成・画像アップロード・カテゴリー選択
+        *   `ItemDetailScreen.tsx`: 商品詳細・AI Q&A・いいね・購入フロー・シーン生成実行
+        *   `MessagesScreen.tsx`: DM一覧・メッセージ送受信・取引ナビ（エスクロー3フェーズ）
+        *   `MyPageScreen.tsx`: 個人ダッシュボード（売上KPI・グラフ・プロフィール編集・アバター更新）
+        *   `AdminDashboardScreen.tsx`: 管理者用システムダッシュボード（全KPI・AI審査ログ・ユーザー管理）
+        *   `HelpScreen.tsx`: ヘルプ・FAQ・利用ガイド
+    *   `PhotoAppraiser.tsx`: 商品画像 AI 査定・推奨価格表示
+    *   `StripePaymentModal.tsx`: 決済モーダル（Stripe風UI・リアルタイムカード判定）
+    *   `main.tsx`: エントリーポイント・ルーティング（URLハッシュ）・自動ツアーマネージャー
+    *   `types.ts`: 共有型定義（User, Item, Conversation, Message, etc.）
+    *   `uploadImage.ts`: マルチパート画像アップロード（ローカル/GCS対応）
+    *   `styles.css`: ウォーム・ミニマリズム設計（テラコッタレッド/エメラルドグリーン/アイボリーベース）
+
+*   `docs/`: 仕様書・ガイド・トラブルシューティング
+    *   `api-spec.md`: REST API エンドポイント定義（認証・商品・購入・DM・AI等）
+    *   `db-design.md`: DB スキーマ・テーブルリレーション
+    *   `ui-flow.md`: ユーザーフロー・画面遷移・デモシナリオ
+    *   `design-system.md`: ウォーム・ミニマリズム色彩体系・タイポグラフィ・マイクロインタラクション
+    *   `features-guide.md`: AI機能詳細（ネゴシエーション・物々交換・シーン生成・ダッシュボード・エスクロー）
+    *   `contributing.md`: 開発者向けセットアップ・アーキテクチャ解説・コーディング規約
+    *   `requirements.md`: 要件定義・実装優先度
+    *   `db-startup-troubleshooting.md`: Cloud Run DB接続トラブル対策
+    *   `faq.md`: よくある質問
+
+*   `infra/terraform/`: GCP インフラストラクチャ as Code
+    *   Cloud Run サービス・Cloud SQL MySQL・Cloud Storage バケット・IAM・GitHub Actionsトリガー
+
+*   `docker-compose.yaml`: ローカル開発用 MySQL 8.0 起動定義
+
+---
+
+## 🎯 実装済み機能
+
+### 認証・ユーザー管理
+- ✅ ユーザー登録・ログイン（JWT認証 / Bearer Token）
+- ✅ プロフィール編集・アバター画像アップロード
+- ✅ パスワード変更・リセット（デモ用）
+- ✅ ロールベースアクセス制御（user / admin）
+- ✅ トークン有効期限管理・セッション保護
+
+### 商品管理
+- ✅ 商品一覧表示（ページング、作成日時降順）
+- ✅ キーワード検索（タイトル・説明全文検索）
+- ✅ カテゴリー・価格範囲フィルター
+- ✅ 商品詳細ページ・複数画像表示
+- ✅ 新規出品・編集・削除・ステータス管理（active/sold/hidden）
+- ✅ いいね機能（ユーザー別・アイテム別集計）
+- ✅ 出品者情報表示（販売成立件数・平均評価・レビュー数）
+
+### AI機能（次世代フリマの核）
+- ✅ **AI商品説明自動生成**: ユーザーの簡潔なメモから魅力的な説明文を OpenAI GPT で自動作成
+- ✅ **AI Q&A応答**: 購入者が商品について質問 → AI が出品者になりすまして回答
+- ✅ **AI価格提案・査定**: 商品画像・説明から推奨価格をOpenAI APIで算出
+- ✅ **AIエージェント・オートネゴシエーション**: 購入者AI ⇔ 出品者AI が自律会話し、1ターンで価格交渉を完結
+- ✅ **AI物々交換マッチング**: 3人以上ユーザー間の需要循環（わらしべ長者ループ）を自動検出・差額清算
+- ✅ **AI使用風景生成**: 商品画像をAI合成し、使用情景を自動生成（DALL-E / Image Edit）
+- ✅ **AI出品審査・モデレーション**: 禁止物品・不適切コンテンツを OpenAI Moderation API で自動検知
+- ✅ **複数AI対応**: OpenAI + Gemini API の切り替え可能設計
+
+### 取引・購入フロー
+- ✅ 購入フロー（決済API連携は簡易シミュレーション）
+- ✅ Stripe風クレジットカード決済モーダル
+- ✅ **3フェーズ・エスクロー管理**: paid → shipped → completed
+- ✅ 取引ナビ（発送・受取・評価ステップ）
+- ✅ 販売・購入履歴管理
+- ✅ 取引完了後の売上リリース
+
+### ダイレクトメッセージ（DM）
+- ✅ ユーザー間リアルタイムDM・会話スレッド
+- ✅ 商品ごとの一対一メッセージング（自動絞り込み）
+- ✅ DMプレビュー・未読管理
+- ✅ DM内「取引ナビ」コントロールハブ（エスクロー状態表示・操作）
+
+### ユーザー評価・レビュー
+- ✅ 取引完了後のユーザー相互評価（1～5段階）
+- ✅ 売上実績・評価平均表示
+- ✅ 出品者信頼スコア可視化
+
+### ダッシュボード・分析
+- ✅ **個人ダッシュボード**: 売上総額・成立件数・獲得いいね数・カテゴリー別出品比率・日別売上トレンド
+- ✅ **管理者ダッシュボード**: システムKPI・AI審査ログリアルタイム監視・ユーザー一覧・ロール変更
+
+### デプロイメント・インフラ
+- ✅ Google Cloud Run への Docker コンテナデプロイ（ワンクリック自動デプロイ via Cloud Build）
+- ✅ Cloud SQL MySQL 接続・自動マイグレーション実行
+- ✅ Cloud Storage への画像永続化（ローカル/GCS切り替え可能）
+- ✅ Terraform Infrastructure as Code（再現性確保）
+- ✅ GitHub Actions トリガー
+- ✅ Distroless コンテナ イメージ最適化（MIME type 手動注入で対応済み）
+
+### 開発支援・テスト
+- ✅ Go単体テスト（`main_test.go`, `upload_test.go`）
+- ✅ ローカル MySQL docker-compose 環境
+- ✅ デモ用ユーザー・データリセット機能
+- ✅ フロントエンド自動ツアー（イベント駆動型10ステップ進行）
+
+---
+
+## 🚀 技術スタック
+
+| レイヤー | 選択技術 | 理由 |
+| --- | --- | --- |
+| **フロントエンド** | React 19 + TypeScript + Vite + CSS | 高速ビルド・最新React機能・型安全性 |
+| **バックエンド** | Go 1.25 | 超高速・軽量・マルチコア対応・デプロイ簡単 |
+| **データベース** | MySQL 8.0 (Cloud SQL) | 堅牢・スケーラブル・インデックス最適化 |
+| **認証** | JWT (Bearer Token) | ステートレス・RESTful・クライアント検証対応 |
+| **マイグレーション** | Goose + go:embed | 自己完結・コンテナ環境対応・Downグレード対応 |
+| **AI API** | OpenAI (GPT, DALL-E, Moderation) + Gemini | 多言語対応・モデレーション・画像生成 |
+| **画像ストレージ** | Cloud Storage (GCS) | CDN統合・署名URL・オブジェクト容量無制限 |
+| **デプロイ** | Cloud Run + Cloud Build | サーバーレス・自動スケーリング・0秒コールドスタート |
+| **IaC** | Terraform | 再現可能・バージョン管理・マルチクラウド対応 |
+
+---
+
+## 🏆 アーキテクチャの見どころ
+
+### 1. 疎結合モノレポ設計
+- フロントエンド / バックエンド / インフラが独立した責務を持ちながらも密結合で高速動作
+- 各ハンドラーが機能ごとに細分化され、保守性・拡張性最大化
+
+### 2. ハイブリッド AI 設計
+- **AI + 決定論的ロジック**: AIの創造性と Go の確実な計算をを組み合わせ
+  - 物々交換清算額: Go が代数計算、AI が妥当性説明
+  - ネゴシエーション: 購入者AI / 出品者AI を 1 ターンシミュレーション
+- **マルチAI対応**: OpenAI / Gemini の API を切り替え可能な設計
+
+### 3. パフォーマンス最適化
+- **カバリングインデックス**: MySQL の複合インデックスでディスクアクセス最小化
+- **コネクションプール**: Max Open Conns 100 / Idle 50 で大規模同時接続対応
+- **マルチパート MIME 手動構築**: Go 標準の `CreateFormFile` バグ回避 → OpenAI API 安定動作
+
+### 4. セキュリティ
+- JWT Bearer Token による ステートレス認証
+- パスワード bcrypt ハッシング（平文非保存）
+- CORS 設定・環境変数分離（`.env` 管理）
+- 管理者ロールによるアクセス制御
+
+### 5. UX / デザイン
+- **ウォーム・ミニマリズム**: テラコッタレッド・エメラルドグリーン・アイボリーで暖かみを表現
+- **マイクロインタラクション**: ホバーエフェクト・backdrop blur・sparkle glow
+- **イベント駆動ツアー**: 非同期 Promise ベースの 10 ステップ自動進行
+
+---
+
+## ⚠️ 既知の制限・改善予定事項
+
+### 現在の制限
+1. **テスト整備が未完了**: 単体テスト（`main_test.go`）は基本的なレベル。E2E テストや統合テストは未実装
+2. **デモスクリプト未作成**: Demo Day 用の自動化デモシナリオがまだ完成していない
+3. **画像処理の複雑性**: Distroless コンテナでの MIME type 問題は対応済みだが、DALL-E 生成時のマルチパート処理は複雑
+
+### 推奨される改善
+1. **テスト拡充**: モックを使用した API テスト、フロントエンド統合テスト（Playwright等）の追加
+2. **デモスクリプト**: Playwright を使用した完全自動デモフロー実装
+3. **キャッシング戦略**: Redis 導入によるセッション・クエリキャッシング
+4. **ログ・モニタリング**: Cloud Logging / Cloud Trace との統合、エラートレーシング強化
+5. **国際化（i18n）**: 多言語サポート（日本語以外）の準備
+
+---
+
+## 📊 プロジェクト統計
+
+- **バックエンドコード**: ~2,500行（Go）
+- **フロントエンドコード**: ~3,500行（TypeScript + React）
+- **DB マイグレーション**: 12テーブル + 複合インデックス
+- **API エンドポイント**: 40+ (auth, items, messages, AI, admin等)
+- **UI画面**: 8 メイン + 2 モーダル
+- **AI連携**: 7 機能（説明生成・Q&A・価格提案・ネゴシエーション・物々交換・シーン生成・モデレーション）
 
 ---
 
