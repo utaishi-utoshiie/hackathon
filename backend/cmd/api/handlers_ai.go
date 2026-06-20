@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -234,8 +233,8 @@ func (a *app) generateItemScene(w http.ResponseWriter, r *http.Request) {
 
 	prompt := itemScenePrompt(storedUser.Name, it)
 
-	geminiKey := a.geminiAPIKey()
-	openAIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	geminiKey := a.geminiAPIKey(r.Context())
+	openAIKey := a.getSecret(r.Context(), "OPENAI_API_KEY")
 
 	var generatedBytes []byte
 	var generatedMIME string
@@ -375,7 +374,7 @@ func (a *app) generateSceneVideo(w http.ResponseWriter, r *http.Request) {
 	base64Image := base64.StdEncoding.EncodeToString(imageBytes)
 
 	// 3. Obtain Gemini API Key for Veo 3.1 or GCP token and Project ID
-	apiKey := a.geminiAPIKey()
+	apiKey := a.geminiAPIKey(r.Context())
 	gcpProjectID := env("FIRESTORE_PROJECT", env("GCP_PROJECT", env("GOOGLE_CLOUD_PROJECT", "")))
 	token, tokenErr := a.getGCPToken()
 

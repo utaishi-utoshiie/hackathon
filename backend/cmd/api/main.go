@@ -465,7 +465,7 @@ func saveGeneratedImageToGCS(prefix string, filename string, contentType string,
 }
 
 func (a *app) callOpenAI(ctx context.Context, prompt string) (string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	apiKey := a.getSecret(ctx, "OPENAI_API_KEY")
 	if apiKey == "" {
 		return "AI機能（シミュレーション）が稼働しました！", nil
 	}
@@ -512,7 +512,7 @@ func (a *app) callOpenAI(ctx context.Context, prompt string) (string, error) {
 }
 
 func (a *app) callOpenAIJSON(ctx context.Context, prompt string, v any) error {
-	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	apiKey := a.getSecret(ctx, "OPENAI_API_KEY")
 	if apiKey == "" {
 		return errors.New("missing OPENAI_API_KEY")
 	}
@@ -568,7 +568,7 @@ type imageUpload struct {
 // callOpenAIImageGenerate は gpt-image-2 の /v1/images/edits で
 // ユーザーアバター画像＋商品画像を合成し、使用シーン画像を生成します。
 func (a *app) callOpenAIImageGenerate(ctx context.Context, prompt string, uploads []imageUpload) ([]byte, error) {
-	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	apiKey := a.getSecret(ctx, "OPENAI_API_KEY")
 	if apiKey == "" {
 		return nil, errors.New("missing OPENAI_API_KEY")
 	}
@@ -651,7 +651,7 @@ func (a *app) callOpenAIImageGenerate(ctx context.Context, prompt string, upload
 
 
 func (a *app) callOpenAIImageEdit(ctx context.Context, prompt string, uploads []imageUpload) ([]byte, error) {
-	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	apiKey := a.getSecret(ctx, "OPENAI_API_KEY")
 	if apiKey == "" {
 		return nil, errors.New("missing OPENAI_API_KEY")
 	}

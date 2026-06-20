@@ -63,18 +63,18 @@ func (a *app) geminiModel() string {
 	return "gemini-2.0-flash"
 }
 
-// geminiAPIKey は GEMINI_API_KEY または ANTIGRAVITY_API_KEY 環境変数を取得します。
-func (a *app) geminiAPIKey() string {
-	if k := strings.TrimSpace(os.Getenv("GEMINI_API_KEY")); k != "" {
+// geminiAPIKey は GEMINI_API_KEY または ANTIGRAVITY_API_KEY を getSecret 経由で取得します。
+func (a *app) geminiAPIKey(ctx context.Context) string {
+	if k := a.getSecret(ctx, "GEMINI_API_KEY"); k != "" {
 		return k
 	}
-	return strings.TrimSpace(os.Getenv("ANTIGRAVITY_API_KEY"))
+	return a.getSecret(ctx, "ANTIGRAVITY_API_KEY")
 }
 
 // callGeminiVision sends an image + text prompt to Gemini and returns a JSON string.
 // Used for product identification from photos.
 func (a *app) callGeminiVision(ctx context.Context, imageBase64, mimeType, prompt string) (string, error) {
-	apiKey := a.geminiAPIKey()
+	apiKey := a.geminiAPIKey(ctx)
 	if apiKey == "" {
 		return "", fmt.Errorf("missing GEMINI_API_KEY / ANTIGRAVITY_API_KEY")
 	}
@@ -94,7 +94,7 @@ func (a *app) callGeminiVision(ctx context.Context, imageBase64, mimeType, promp
 // callOpenAIVision sends an image + text prompt to OpenAI and returns a JSON string.
 // Used as a fallback when Gemini is unavailable or has key configuration issues.
 func (a *app) callOpenAIVision(ctx context.Context, imageBase64, mimeType, prompt string) (string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	apiKey := a.getSecret(ctx, "OPENAI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("missing OPENAI_API_KEY")
 	}
@@ -164,7 +164,7 @@ func (a *app) callOpenAIVision(ctx context.Context, imageBase64, mimeType, promp
 // callGeminiSearch sends a text prompt to Gemini with Google Search grounding enabled.
 // Used for real-time market price research.
 func (a *app) callGeminiSearch(ctx context.Context, prompt string) (string, error) {
-	apiKey := a.geminiAPIKey()
+	apiKey := a.geminiAPIKey(ctx)
 	if apiKey == "" {
 		return "", fmt.Errorf("missing GEMINI_API_KEY / ANTIGRAVITY_API_KEY")
 	}
@@ -263,7 +263,7 @@ func (a *app) photoAppraise(w http.ResponseWriter, r *http.Request) {
 	var visionJSON string
 	var geminiErr error
 
-	apiKey := a.geminiAPIKey()
+	apiKey := a.geminiAPIKey(r.Context())
 	if apiKey != "" {
 		log.Printf("Attempting Gemini Vision for photo appraisal...")
 		visionJSON, geminiErr = a.callGeminiVision(r.Context(), req.ImageBase64, req.MimeType, visionPrompt)
@@ -276,7 +276,7 @@ func (a *app) photoAppraise(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Gemini API key is missing. Falling back to OpenAI Vision...")
 		}
 
-		openAIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+		openAIKey := a.getSecret(r.Context(), "OPENAI_API_KEY")
 		if openAIKey != "" {
 			var openAIErr error
 			visionJSON, openAIErr = a.callOpenAIVision(r.Context(), req.ImageBase64, req.MimeType, visionPrompt)
@@ -359,7 +359,7 @@ func (a *app) photoAppraise(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Gemini API key is missing. Falling back to OpenAI for appraisal text...")
 		}
 
-		openAIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+		openAIKey := a.getSecret(r.Context(), "OPENAI_API_KEY")
 		if openAIKey != "" {
 			searchText, err = a.callOpenAI(r.Context(), searchPrompt)
 			if err != nil {
@@ -428,7 +428,7 @@ func extractTaggedJSON(s string) string {
 // callGeminiImageGenerate は複数の入力画像とプロンプトから Gemini で合成画像を生成します。
 // OpenAI の /v1/images/edits の代替として使用します。
 func (a *app) callGeminiImageGenerate(ctx context.Context, prompt string, uploads []imageUpload) ([]byte, string, error) {
-	apiKey := a.geminiAPIKey()
+	apiKey := a.geminiAPIKey(ctx)
 	if apiKey == "" {
 		return nil, "", fmt.Errorf("missing GEMINI_API_KEY / ANTIGRAVITY_API_KEY")
 	}
@@ -516,7 +516,7 @@ func (a *app) callGeminiImageGenerate(ctx context.Context, prompt string, upload
 // callGeminiVideoGenerate は Veo 3.1 (veo-3.1-generate-preview) モデルを叩き、
 // 静止画から LRO (Long Running Operation) を使って動画（シネマグラフ）を生成し、完了をポーリングします。
 func (a *app) callGeminiVideoGenerate(ctx context.Context, prompt string, base64Image string) ([]byte, error) {
-	apiKey := a.geminiAPIKey()
+	apiKey := a.geminiAPIKey(ctx)
 	if apiKey == "" {
 		return nil, fmt.Errorf("missing GEMINI_API_KEY / ANTIGRAVITY_API_KEY")
 	}
@@ -702,4 +702,99 @@ func defaultPrice(category, condition string) int {
 		price = int(float64(price) * m)
 	}
 	return price
+}
+
+// getSecret は指定された環境変数のキー(envKey)から値を取得し、
+// もしその値がGCP Secret Managerのシークレットリソース名(projects/...)または
+// シークレットID(60文字以下の単純な文字列で、かつGCPプロジェクト情報がある場合)
+// である場合は、GCP Secret Manager APIから動的に本物のキーをフェッチします。
+// 取得できない場合やローカル環境などでは、元の環境変数の生値をそのまま返します。
+func (a *app) getSecret(ctx context.Context, envKey string) string {
+	rawVal := strings.TrimSpace(os.Getenv(envKey))
+	if rawVal == "" {
+		return ""
+	}
+
+	var resourceName string
+	if strings.HasPrefix(rawVal, "projects/") {
+		resourceName = rawVal
+		if !strings.Contains(resourceName, "/versions/") {
+			resourceName = strings.TrimSuffix(resourceName, "/") + "/versions/latest"
+		}
+	} else {
+		// APIキーは一般にランダムな長い文字列(記号など含む)ですが、シークレットIDは英数字・ハイフン・アンダースコアのみです。
+		// 文字種チェックを行い、シークレットIDの形式に合致し、かつプロジェクトIDが取得できる場合のみSecret Managerを試行します。
+		isSecretID := true
+		for _, c := range rawVal {
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+				isSecretID = false
+				break
+			}
+		}
+
+		if isSecretID && len(rawVal) < 60 {
+			projectID := os.Getenv("FIRESTORE_PROJECT")
+			if projectID == "" {
+				projectID = os.Getenv("GCP_PROJECT")
+			}
+			if projectID == "" {
+				projectID = os.Getenv("GOOGLE_CLOUD_PROJECT")
+			}
+			if projectID != "" {
+				resourceName = fmt.Sprintf("projects/%s/secrets/%s/versions/latest", projectID, rawVal)
+			}
+		}
+	}
+
+	if resourceName == "" {
+		return rawVal
+	}
+
+	log.Printf("Secret Manager: env %s points to secret %s. Attempting to fetch...", envKey, resourceName)
+	token, err := a.getGCPToken()
+	if err != nil {
+		log.Printf("Secret Manager: Failed to get GCP identity token (falling back to raw env value): %v", err)
+		return rawVal
+	}
+
+	reqURL := fmt.Sprintf("https://secretmanager.googleapis.com/v1/%s:access", resourceName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return rawVal
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	// GCP API呼び出しなので5秒タイムアウト
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Secret Manager: HTTP request failed for %s: %v", resourceName, err)
+		return rawVal
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Secret Manager: API returned status %d for %s: %s. Falling back.", resp.StatusCode, resourceName, string(body))
+		return rawVal
+	}
+
+	var parsed struct {
+		Payload struct {
+			Data string `json:"data"`
+		} `json:"payload"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		log.Printf("Secret Manager: Failed to parse API response: %v", err)
+		return rawVal
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(parsed.Payload.Data))
+	if err != nil {
+		log.Printf("Secret Manager: Failed to decode base64 payload: %v", err)
+		return rawVal
+	}
+
+	log.Printf("Secret Manager: Successfully fetched secret for env %s from GCP", envKey)
+	return strings.TrimSpace(string(decoded))
 }
