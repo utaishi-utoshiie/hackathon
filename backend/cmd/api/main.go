@@ -713,11 +713,10 @@ func (a *app) callOpenAIImageEdit(ctx context.Context, prompt string, uploads []
 	return base64.StdEncoding.DecodeString(res.Data[0].B64JSON)
 }
 
-func itemScenePrompt(username string, it item) string {
-	return fmt.Sprintf(`flea market product photo placement scene. 
-We have a profile avatar image of the user (who is named '%s') and the actual product photo of the item '%s' (category '%s', description: '%s').
-Blend the product image naturally onto a table, shelf, or hands of a person, and seamlessly merge the user avatar in the background or context as the person happily looking at or holding the product. If the product is wearable, you can also creatively place it on the user's avatar as if they are trying it on.
-Do not cover the core design of the product. The environment should look warm, clean, modern, and highly appealing for a flea market listing. Output the final merged picture.`, username, it.Title, it.Category, it.Description)
+func itemScenePrompt() string {
+	return `flea market product usage scene.
+Blend the product image naturally onto a table, shelf, or hands of a person. Seamlessly merge the user avatar in the background or as the person happily looking at or holding the product. If the product is wearable, place it on the user's avatar as if they are trying it on.
+Do not cover the core design of the product. The environment should look warm, clean, modern, and highly appealing for a flea market listing. Output the final merged picture.`
 }
 
 func (a *app) saveAI(ctx context.Context, userID int64, itemID *int64, featureType string, prompt string, result string) {

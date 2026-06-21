@@ -231,7 +231,7 @@ func (a *app) generateItemScene(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt := itemScenePrompt(storedUser.Name, it)
+	prompt := itemScenePrompt()
 
 	geminiKey := a.geminiAPIKey(r.Context())
 	openAIKey := a.getSecret(r.Context(), "OPENAI_API_KEY")
