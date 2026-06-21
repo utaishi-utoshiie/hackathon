@@ -380,6 +380,16 @@ func gcsPathToPublicURL(path string) string {
 }
 
 func (a *app) downloadImageAsset(ctx context.Context, path string) ([]byte, string, error) {
+	if strings.HasPrefix(path, "/uploads/") {
+		uploadDir := env("UPLOAD_DIR", "uploads")
+		filename := strings.TrimPrefix(path, "/uploads/")
+		data, err := os.ReadFile(filepath.Join(uploadDir, filename))
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to read local upload %s: %w", path, err)
+		}
+		return data, http.DetectContentType(data), nil
+	}
+
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
 		if err != nil {
