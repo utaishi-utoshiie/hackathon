@@ -2,6 +2,18 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args:
       - build
+      - --build-arg
+      - VITE_FIREBASE_API_KEY=${_FIREBASE_API_KEY}
+      - --build-arg
+      - VITE_FIREBASE_AUTH_DOMAIN=${_FIREBASE_AUTH_DOMAIN}
+      - --build-arg
+      - VITE_FIREBASE_PROJECT_ID=$PROJECT_ID
+      - --build-arg
+      - VITE_FIREBASE_STORAGE_BUCKET=${_FIREBASE_STORAGE_BUCKET}
+      - --build-arg
+      - VITE_FIREBASE_MESSAGING_SENDER_ID=${_FIREBASE_MESSAGING_SENDER_ID}
+      - --build-arg
+      - VITE_FIREBASE_APP_ID=${_FIREBASE_APP_ID}
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${_TAG}
       - .
@@ -24,7 +36,7 @@ steps:
       - --service-account
       - ${_RUNTIME_SERVICE_ACCOUNT}
       - --update-env-vars
-      - GCS_BUCKET=${_UPLOADS_BUCKET}
+      - GCS_BUCKET=${_UPLOADS_BUCKET},FIREBASE_PROJECT_ID=$PROJECT_ID
       - --add-cloudsql-instances
       - ${_CLOUD_SQL_CONNECTION}
       - --quiet
@@ -42,3 +54,8 @@ substitutions:
   _RUNTIME_SERVICE_ACCOUNT: next-market-run@${PROJECT_ID}.iam.gserviceaccount.com
   _UPLOADS_BUCKET: ${PROJECT_ID}-next-market-uploads
   _CLOUD_SQL_CONNECTION: ${PROJECT_ID}:asia-northeast1:next-market-mysql
+  _FIREBASE_API_KEY: AIzaSyC6-mOjVjM98YSVDijlQoExpVjL7sT1dfY
+  _FIREBASE_AUTH_DOMAIN: uttc-hackathon-a14e6.firebaseapp.com
+  _FIREBASE_STORAGE_BUCKET: uttc-hackathon-a14e6.firebasestorage.app
+  _FIREBASE_MESSAGING_SENDER_ID: "493961426414"
+  _FIREBASE_APP_ID: "1:493961426414:web:7323345cdc74cfc3064aff"

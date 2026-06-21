@@ -24,6 +24,8 @@ import (
 
 	"next-market/backend/migrations"
 
+	firebase "firebase.google.com/go/v4"
+	"firebase.google.com/go/v4/auth"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 )
@@ -125,6 +127,7 @@ type app struct {
 	jwtSecret     string
 	allowedOrigin string
 	imageStore    imageStore
+	firebaseAuth  *auth.Client
 	dbErr         error
 	dbMu          sync.RWMutex
 }
@@ -168,6 +171,18 @@ func main() {
 		jwtSecret:     env("JWT_SECRET", "super-secret-key"),
 		allowedOrigin: env("ALLOWED_ORIGIN", "http://localhost:5173"),
 	}
+	projectID := strings.TrimSpace(env("FIREBASE_PROJECT_ID", os.Getenv("GOOGLE_CLOUD_PROJECT")))
+	if projectID != "" {
+		firebaseApp, firebaseErr := firebase.NewApp(context.Background(), &firebase.Config{ProjectID: projectID})
+		if firebaseErr != nil {
+			log.Printf("Firebase initialization failed: %v", firebaseErr)
+		} else if client, authErr := firebaseApp.Auth(context.Background()); authErr != nil {
+			log.Printf("Firebase Auth initialization failed: %v", authErr)
+		} else {
+			a.firebaseAuth = client
+			log.Printf("Firebase Auth initialized for project %s", projectID)
+		}
+	}
 	uploadStore, closeUploadStore, err := newImageStore(context.Background())
 	if err != nil {
 		log.Fatalf("failed to initialize image storage: %v", err)
@@ -180,6 +195,7 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", a.health)
 	mux.HandleFunc("POST /api/auth/register", a.register)
 	mux.HandleFunc("POST /api/auth/login", a.login)
+	mux.HandleFunc("POST /api/auth/firebase", a.firebaseLogin)
 	mux.HandleFunc("POST /api/auth/reset-demo", a.resetPasswordDemo)
 	mux.HandleFunc("GET /api/items", a.listItems)
 	mux.HandleFunc("POST /api/items", a.requireAuth(a.createItem))

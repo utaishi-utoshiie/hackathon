@@ -64,6 +64,60 @@ func (a *app) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"token": a.signToken(u), "user": u})
 }
 
+func (a *app) firebaseLogin(w http.ResponseWriter, r *http.Request) {
+	if a.firebaseAuth == nil {
+		writeError(w, http.StatusServiceUnavailable, "Firebase Authentication is not configured")
+		return
+	}
+	var req struct {
+		IDToken string `json:"idToken"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.IDToken) == "" {
+		writeError(w, http.StatusBadRequest, "Firebase ID token is required")
+		return
+	}
+
+	token, err := a.firebaseAuth.VerifyIDToken(r.Context(), req.IDToken)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid Firebase ID token")
+		return
+	}
+	email, _ := token.Claims["email"].(string)
+	emailVerified, _ := token.Claims["email_verified"].(bool)
+	if email == "" || !emailVerified {
+		writeError(w, http.StatusUnauthorized, "a verified Google email is required")
+		return
+	}
+	name, _ := token.Claims["name"].(string)
+	avatarURL, _ := token.Claims["picture"].(string)
+	if strings.TrimSpace(name) == "" {
+		name = strings.Split(email, "@")[0]
+	}
+
+	db := a.dbHandle()
+	_, err = db.ExecContext(r.Context(), `INSERT INTO users (name, email, password_hash, role, avatar_url)
+		VALUES (?, ?, ?, 'user', ?)
+		ON DUPLICATE KEY UPDATE name = VALUES(name),
+		avatar_url = CASE WHEN VALUES(avatar_url) = '' THEN avatar_url ELSE VALUES(avatar_url) END`,
+		name, strings.ToLower(email), a.hashPassword("firebase:"+token.UID), avatarURL)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to synchronize Firebase user")
+		return
+	}
+	var u user
+	err = db.QueryRowContext(r.Context(),
+		"SELECT id, name, email, role, COALESCE(avatar_url, '') FROM users WHERE email = ?", strings.ToLower(email),
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.AvatarURL)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load synchronized user")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"token": a.signToken(u), "user": u})
+}
+
 func (a *app) updateProfile(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	var req struct {

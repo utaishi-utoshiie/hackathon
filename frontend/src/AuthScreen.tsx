@@ -6,6 +6,8 @@
 import React, { useState, FormEvent } from "react";
 import { LogIn, Store, PackagePlus, MessageCircle } from "lucide-react";
 import { User } from "./types";
+import { signInWithPopup } from "firebase/auth";
+import { firebaseAuth, firebaseConfigured, googleProvider } from "./firebase";
 
 const API_BASE = "/api";
 
@@ -75,6 +77,28 @@ export function AuthScreen({
     }
   };
 
+  const signInWithGoogle = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      if (!firebaseConfigured) throw new Error("Firebase の環境変数が未設定です。frontend/.env.example を参照してください。");
+      const credential = await signInWithPopup(firebaseAuth, googleProvider);
+      const response = await fetch(`${API_BASE}/auth/firebase`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: await credential.user.getIdToken() })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Google ログインに失敗しました");
+      onSessionUpdated(data.token, data.user);
+    } catch (err) {
+      const code = typeof err === "object" && err && "code" in err ? String(err.code) : "";
+      if (code !== "auth/popup-closed-by-user") setError(err instanceof Error ? err.message : "Google ログインに失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <section className="auth-layout">
       <div className="auth-hero">
@@ -98,6 +122,12 @@ export function AuthScreen({
             ログイン
           </button>
         </div>
+
+        <button className="google-auth-button" disabled={loading} type="button" onClick={signInWithGoogle}>
+          <span className="google-logo" aria-hidden="true">G</span>
+          Google アカウントで続ける
+        </button>
+        <div className="auth-divider"><span>または</span></div>
 
         <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           {mode === "register" && (

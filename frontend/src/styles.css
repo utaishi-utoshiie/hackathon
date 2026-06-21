@@ -518,6 +518,16 @@ select:focus {
   font-weight: 700;
 }
 
+.google-auth-button {
+  width: 100%; min-height: 48px; margin: 18px 0 4px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  border: 1px solid #d7d2ca; border-radius: 12px; background: #fff;
+  color: #292524; font-weight: 700;
+}
+.google-logo { color: #4285f4; font: 700 20px/1 Arial, sans-serif; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 14px 0; color: #8b837a; font-size: 12px; }
+.auth-divider::before, .auth-divider::after { content: ""; height: 1px; flex: 1; background: #e7e2da; }
+
 /* =========================================
    Forms
    ========================================= */
