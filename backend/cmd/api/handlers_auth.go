@@ -82,6 +82,7 @@ func (a *app) firebaseLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, err := a.firebaseAuth.VerifyIDToken(r.Context(), req.IDToken)
 	if err != nil {
+		fmt.Printf("Firebase ID token verification failed: %v\n", err)
 		writeError(w, http.StatusUnauthorized, "invalid Firebase ID token")
 		return
 	}
