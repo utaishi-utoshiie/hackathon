@@ -90,19 +90,19 @@ func (a *app) seedDemo(w http.ResponseWriter, r *http.Request) {
 
 	// Delete image asset records
 	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM item_images WHERE item_id IN "+demoItemIDs)
-	// Delete the 50-item marketplace catalog. The fixed ID range keeps this seeder idempotent.
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM item_scene_generations WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM ai_generations WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM user_reviews WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM barter_loop_members WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM negotiations WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM likes WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM purchases WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM item_moderations WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE item_id BETWEEN 10001 AND 10050)")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM conversations WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM item_images WHERE item_id BETWEEN 10001 AND 10050")
-	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM items WHERE id BETWEEN 10001 AND 10050")
+	// Delete the 100-item marketplace catalog. The fixed ID range keeps this seeder idempotent.
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM item_scene_generations WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM ai_generations WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM user_reviews WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM barter_loop_members WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM negotiations WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM likes WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM purchases WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM item_moderations WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE item_id BETWEEN 10001 AND 10100)")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM conversations WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM item_images WHERE item_id BETWEEN 10001 AND 10100")
+	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM items WHERE id BETWEEN 10001 AND 10100")
 
 	// Finally delete the parent items themselves safely
 	_, _ = databaseTransaction.ExecContext(r.Context(), "DELETE FROM items WHERE id IN "+demoItemIDs+" OR seller_id = ? OR seller_id = 9992 OR seller_id = 9993", currentUserRecord.ID)
@@ -217,7 +217,7 @@ func (a *app) seedDemo(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":          "success",
-		"message":         "デモデータと既存商品50件のセットアップが完了しました！",
+		"message":         "デモデータと既存商品100件のセットアップが完了しました！",
 		"negotiateItemId": 9901,
 		"token":           a.signToken(currentUserRecord),
 		"user":            currentUserRecord,

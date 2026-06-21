@@ -64,8 +64,15 @@ var demoCatalog = []demoCatalogItem{
 }
 
 func seedDemoCatalog(ctx context.Context, tx *sql.Tx) error {
-	for index, product := range demoCatalog {
-		id := 10001 + index
+	if err := seedCatalogItems(ctx, tx, demoCatalog, 10001); err != nil {
+		return err
+	}
+	return seedCatalogItems(ctx, tx, demoMensCatalog, 10051)
+}
+
+func seedCatalogItems(ctx context.Context, tx *sql.Tx, catalog []demoCatalogItem, firstID int) error {
+	for index, product := range catalog {
+		id := firstID + index
 		sellerID := 9992
 		if index%2 == 1 {
 			sellerID = 9993
