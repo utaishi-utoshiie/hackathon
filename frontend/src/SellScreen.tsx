@@ -22,8 +22,8 @@ export function SellScreen({
   const [description, setDescription] = useState("");
   const [appraiserApplied, setAppraiserApplied] = useState(false);
   const [category, setCategory] = useState("衣服・ファッション");
-  const [price, setPrice] = useState(3000);
-  const [minPrice, setMinPrice] = useState(2000);
+  const [price, setPrice] = useState("3000");
+  const [minPrice, setMinPrice] = useState("2000");
   const [aiPersonality, setAiPersonality] = useState<"standard" | "osaka" | "cool" | "anime">("standard");
   const [barterEnabled, setBarterEnabled] = useState(false);
   const [wantCategory, setWantCategory] = useState("家電・スマホ");
@@ -37,8 +37,8 @@ export function SellScreen({
     if (CATEGORIES.includes(result.category)) {
       setCategory(result.category);
     }
-    setPrice(result.price);
-    setMinPrice(result.minPrice);
+    setPrice(String(result.price));
+    setMinPrice(String(result.minPrice));
     const descLines = [
       result.searchSummary ? `【相場情報】${result.searchSummary}` : "",
       result.reason ? `【査定根拠】${result.reason}` : "",
@@ -63,8 +63,8 @@ export function SellScreen({
         method: "POST",
         body: JSON.stringify({ title, category, condition: "未使用に近い", notes: "美品、即購入OK" })
       });
-      setPrice(pData.price);
-      setMinPrice(pData.minPrice);
+      setPrice(String(pData.price));
+      setMinPrice(String(pData.minPrice));
       setSuggestedMsg(`🔮 AI査定完了: 推奨価格 ¥${pData.price.toLocaleString()} (理由: ${pData.reason})`);
 
       const dData = await api<{ description: string }>("/ai/generate-description", {
@@ -99,8 +99,8 @@ export function SellScreen({
           title,
           description,
           category,
-          price,
-          minPrice,
+          price: Number(price),
+          minPrice: Number(minPrice),
           aiPersonality,
           barterEnabled,
           wantCategory,
@@ -138,7 +138,7 @@ export function SellScreen({
 
         <div className="input-group">
           <label>商品名</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="ルイヴィトンの折りたたみ財布" />
+          <input value={title} onChange={(e) => setTitle(e.target.value)} required />
           <button type="button" disabled={suggesting} onClick={suggestPriceAndDescribe} style={{ background: "linear-gradient(135deg, #4F46E5, #6366f1)", color: "#fff", border: "none", alignSelf: "start", marginTop: "8px", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
             <Sparkles size={14} /> {suggesting ? "AIが推敲・価格査定中..." : "OpenAIで自動査定＆説明文作成"}
           </button>
@@ -147,7 +147,7 @@ export function SellScreen({
 
         <div className="input-group">
           <label>商品説明 (Markdown対応)</label>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} required rows={6} placeholder="商品の状態や仕様をご記入ください。AIが生成したテキストを調整することも可能です。" />
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} required rows={6} />
         </div>
 
         {/* Category tags selector */}
@@ -180,11 +180,31 @@ export function SellScreen({
         <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
           <div className="input-group">
             <label>出品希望価格 (¥)</label>
-            <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} required />
+            <input
+            type="number"
+            value={price}
+            min="0"
+            onChange={(e) => {
+              const raw = e.target.value;
+              const num = parseInt(raw, 10);
+              setPrice(isNaN(num) ? "" : String(num));
+            }}
+            required
+          />
           </div>
           <div className="input-group">
             <label>最低売却許容価格 (¥・極秘)</label>
-            <input type="number" value={minPrice} onChange={(e) => setMinPrice(Number(e.target.value))} required />
+            <input
+              type="number"
+              value={minPrice}
+              min="0"
+              onChange={(e) => {
+                const raw = e.target.value;
+                const num = parseInt(raw, 10);
+                setMinPrice(isNaN(num) ? "" : String(num));
+              }}
+              required
+            />
             <small style={{ color: "#9698ab" }}>※AI交渉エージェントが、これ未満での値下げ交渉を完全にブロックします。</small>
           </div>
         </div>
