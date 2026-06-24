@@ -41,9 +41,9 @@ export function AuthScreen({
   notice
 }: AuthScreenProps) {
   const [mode, setMode] = useState<"login" | "register">("register");
-  const [name, setName] = useState("Toshi");
-  const [email, setEmail] = useState("toshi@example.com");
-  const [password, setPassword] = useState("secret");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -153,58 +153,6 @@ export function AuthScreen({
         {error && <p className="error" style={{ marginTop: "12px" }}>{error}</p>}
         {notice && <p className="notice inline-notice" style={{ marginTop: "12px" }}>{notice}</p>}
 
-        {/* Unsecured Password Override Tool (Demo Debugger) */}
-        <details style={{ marginTop: "24px", background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "12px", padding: "12px" }}>
-          <summary style={{ fontSize: "12px", fontWeight: "bold", color: "#64748b", cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: "6px" }}>
-            <span>⚠️ デモ専用：パスワード無条件変更（開発者ツール）</span>
-          </summary>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px" }}>
-            <p style={{ margin: 0, fontSize: "11px", color: "#64748b", lineHeight: "1.4" }}>
-              任意のメールアドレスのパスワードを無条件で上書き・強制更新します。（アカウントが存在しない場合は自動で新規登録されます）
-            </p>
-            <div style={{ display: "flex", gap: "8px", flexDirection: "column" }}>
-              <input
-                type="email"
-                placeholder="対象メールアドレス (例: taishi@example.com)"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={{ padding: "8px", fontSize: "12px", borderRadius: "6px", width: "100%" }}
-              />
-              <input
-                type="password"
-                placeholder="新しいパスワード (6文字以上)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={{ padding: "8px", fontSize: "12px", borderRadius: "6px", width: "100%" }}
-              />
-              <button
-                type="button"
-                className="primary-button"
-                style={{ background: "#4F46E5", color: "#fff", border: "none", padding: "10px 14px", fontSize: "12px", cursor: "pointer", alignSelf: "start", width: "100%" }}
-                onClick={async () => {
-                  if (!email || password.length < 6) {
-                    alert("メールアドレス and 6文字以上の新しいパスワードを入力してください。");
-                    return;
-                  }
-                  try {
-                    const res = await fetch("/api/auth/reset-demo", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ email, password })
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error ?? "リセットに失敗しました");
-                    alert(`🔐 データベース書き換え成功！\n${data.message}`);
-                  } catch (err) {
-                    alert(err instanceof Error ? err.message : "パスワード更新に失敗しました");
-                  }
-                }}
-              >
-                ⚡ データベースを強制上書き（更新）
-              </button>
-            </div>
-          </div>
-        </details>
       </section>
     </section>
   );

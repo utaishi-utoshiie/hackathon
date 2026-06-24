@@ -23,7 +23,7 @@ function cleanErrorMessage(err: any, fallback: string): string {
     return "サーバーとのネットワーク接続に一時的なエラーが発生しました。インターネット回線をご確認の上、もう一度お試しください。";
   }
   if (msg.includes("Duplicate entry") || msg.includes("1062")) {
-    return "すでに登録済みのデータ（重複）が存在します。画面上部の『⚡ デモデータを自動投入』をクリックして初期設定からやり直してください。";
+    return "すでに登録済みのデータ（重複）が存在します。もう一度お試しください。";
   }
   return msg;
 }
@@ -101,10 +101,6 @@ interface ItemDetailScreenProps {
   onChanged: (itemId: number) => void;
   onNotice: (message: string) => void;
   onConversationCreated: (conversationId: number) => Promise<void>;
-  onCompleteStep?: (step: number) => void;
-  autoPilot?: boolean;
-  autoPilotStep?: number;
-  onCompleteAutopilotStep?: (step: number) => void;
 }
 
 export function ItemDetailScreen({
@@ -114,13 +110,9 @@ export function ItemDetailScreen({
   onBack,
   onChanged,
   onNotice,
-  onConversationCreated,
-  onCompleteStep,
-  autoPilot,
-  autoPilotStep,
-  onCompleteAutopilotStep
+  onConversationCreated
 }: ItemDetailScreenProps) {
-  const [question, setQuestion] = useState("通勤用として雨の日にも使えそう？");
+  const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [loadingAI, setLoadingAI] = useState(false);
   const [aiError, setAIError] = useState("");
@@ -162,51 +154,6 @@ export function ItemDetailScreen({
       dialogueEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [dialogueIndex, negotiationResult]);
-
-  // Autopilot Actions inside Item Detail
-  useEffect(() => {
-    if (!autoPilot) return;
-
-    if (autoPilotStep === 4) {
-      // Start the actual pricing negotiation simulation (which is step 4!)
-      const timer = setTimeout(() => {
-        void startNegotiation();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [autoPilot, autoPilotStep]);
-
-  useEffect(() => {
-    if (!autoPilot || autoPilotStep !== 9) return;
-
-    const timer = setTimeout(() => {
-      const runGenerations = async () => {
-        try {
-          await generateScene();
-        } catch (e) {
-          console.warn("Autopilot scene generation failed, continuing tour:", e);
-        }
-
-        // Wait 2.2s for display
-        await new Promise((resolve) => setTimeout(resolve, 2200));
-
-        try {
-          await generateSceneVideo();
-        } catch (e) {
-          console.warn("Autopilot video generation failed, continuing tour:", e);
-        }
-
-        // Wait 5.5s for display
-        await new Promise((resolve) => setTimeout(resolve, 5500));
-
-        if (onCompleteAutopilotStep) onCompleteAutopilotStep(9);
-      };
-
-      void runGenerations();
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [autoPilot, autoPilotStep]);
 
   useEffect(() => {
     return () => {
@@ -297,8 +244,7 @@ export function ItemDetailScreen({
       setVideoUrl(data.videoUrl);
       setVideoSimulated(data.simulated);
       setIsPlayingVideo(true);
-      onNotice(data.simulated ? "デモ版の動画演出を表示しました" : "生成写真を元にAI商品紹介動画を生成しました！");
-      if (onCompleteStep) onCompleteStep(3);
+      onNotice(data.simulated ? "AI動画演出を表示しました" : "生成写真を元にAI商品紹介動画を生成しました！");
     } catch (err) {
       setVideoError(cleanErrorMessage(err, "AI動画の生成に失敗しました"));
     } finally {
@@ -354,12 +300,6 @@ export function ItemDetailScreen({
             onChanged(currentItem.id);
           } else {
             onNotice("AI交渉が決裂しました。予算を調整して再交渉できます。");
-          }
-          if (onCompleteStep) onCompleteStep(1);
-          if (autoPilot && onCompleteAutopilotStep) {
-            setTimeout(() => {
-              onCompleteAutopilotStep(4);
-            }, 3000);
           }
         } else {
           setDialogueIndex(idx);
@@ -468,7 +408,7 @@ export function ItemDetailScreen({
               <img className="scene-image" src={getPublicUrl(currentItem.imageUrl) || "/placeholder.svg"} alt="" />
             </section>
             <section className="scene-card">
-              <p className="eyebrow">AI商品紹介動画（デモ版）</p>
+              <p className="eyebrow">AI商品紹介動画</p>
               {!scene ? (
                 <div className="scene-placeholder">あなた専用の使用イメージを生成できます</div>
               ) : isPlayingVideo ? (
@@ -489,7 +429,6 @@ export function ItemDetailScreen({
                     <div className="sparkle" style={{ position: "absolute", top: "20%", left: "30%", width: "12px", height: "12px", background: "#fff", borderRadius: "50%", boxShadow: "0 0 10px #fff, 0 0 20px #ffccb8", animation: "sparkleGlow 3s infinite alternate ease-in-out" }}></div>
                     <div className="sparkle" style={{ position: "absolute", top: "60%", left: "70%", width: "8px", height: "8px", background: "#fff", borderRadius: "50%", boxShadow: "0 0 8px #fff, 0 0 16px #b3dcff", animation: "sparkleGlow 2.5s infinite alternate ease-in-out", animationDelay: "0.8s" }}></div>
                     <div className="sparkle" style={{ position: "absolute", top: "40%", left: "80%", width: "10px", height: "10px", background: "#fff", borderRadius: "50%", boxShadow: "0 0 8px #fff, 0 0 16px #ffefe9", animation: "sparkleGlow 3.5s infinite alternate ease-in-out", animationDelay: "1.5s" }}></div>
-                    <span style={{ position: "absolute", top: "10px", right: "10px", padding: "4px 8px", borderRadius: "999px", background: "rgba(26,27,46,.78)", color: "#fff", fontSize: "11px", fontWeight: 700 }}>デモ演出</span>
                   </div>
                 ) : (
                   <video src={videoUrl} autoPlay loop muted playsInline className="scene-image" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "8px" }} />
@@ -507,7 +446,7 @@ export function ItemDetailScreen({
             {scene && (
               <button type="button" className="ai-button" disabled={!user || videoLoading} onClick={isPlayingVideo ? () => setIsPlayingVideo(false) : () => void generateSceneVideo()} style={{ flex: 1, background: isPlayingVideo ? "#edeef5" : "#4F46E5", color: isPlayingVideo ? "#1A1B2E" : "#ffffff", borderColor: isPlayingVideo ? "#edeef5" : "#4F46E5" }}>
                 <Bot size={18} />
-                {videoLoading ? "AI動画生成APIを実行中..." : isPlayingVideo ? "⏹️ 再生停止" : "🎬 AI商品紹介動画を生成（デモ版）"}
+                {videoLoading ? "AI動画生成APIを実行中..." : isPlayingVideo ? "⏹️ 再生停止" : "🎬 AI商品紹介動画を生成"}
               </button>
             )}
           </div>
@@ -546,7 +485,7 @@ export function ItemDetailScreen({
         />
       )}
 
-      {(showNegotiation || (autoPilot && (autoPilotStep === 3 || autoPilotStep === 4))) && (
+      {showNegotiation && (
         <div className="negotiation-modal-backdrop" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "20px" }}>
           <div className="negotiation-modal-content" style={{ background: "#ffffff", borderRadius: "12px", border: "2px solid #edeef5", padding: "24px", width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: "20px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #edeef5", paddingBottom: "12px" }}>
@@ -636,7 +575,7 @@ export function ItemDetailScreen({
         </div>
       )}
 
-      {(showAppraisal || (autoPilot && autoPilotStep === 2)) && (
+      {showAppraisal && (
         <AppraisalModal 
           item={currentItem} 
           onClose={() => setShowAppraisal(false)} 

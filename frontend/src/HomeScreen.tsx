@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { Sparkles, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Item, CATEGORIES, getPublicUrl } from "./types";
 
 interface HomeScreenProps {
@@ -14,7 +14,6 @@ interface HomeScreenProps {
   filters: { q: string; category: string; min_price: string; max_price: string };
   onFiltersChange: (filters: { q: string; category: string; min_price: string; max_price: string }) => void;
   onOpenItem: (itemId: number) => void;
-  onRunDemo?: () => void;
 }
 
 export function HomeScreen({
@@ -23,8 +22,7 @@ export function HomeScreen({
   itemsError,
   filters,
   onFiltersChange,
-  onOpenItem,
-  onRunDemo
+  onOpenItem
 }: HomeScreenProps) {
   return (
     <section className="home-shell">
@@ -35,31 +33,6 @@ export function HomeScreen({
           <p style={{ color: "#6b6d85", fontSize: "14px", margin: 0, lineHeight: "1.5" }}>
             エージェント交渉からマルチホップ物々交換、AI写真編集、Stripeエスクローまで完備した最先端フリマ
           </p>
-          {onRunDemo && (
-            <div className="hero-actions">
-              <button 
-                type="button"
-                onClick={onRunDemo} 
-                className="primary-button"
-                style={{ 
-                  background: "linear-gradient(135deg, #6366f1, #4F46E5)", 
-                  color: "#ffffff", 
-                  border: "none", 
-                  padding: "12px 24px", 
-                  borderRadius: "30px", 
-                  fontWeight: 700, 
-                  fontSize: "14px", 
-                  cursor: "pointer", 
-                  boxShadow: "0 4px 15px rgba(79, 70, 229, 0.4)",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px"
-                }}
-              >
-                <Sparkles size={16} /> ⚡ デモデータを自動投入（デモを実行）
-              </button>
-            </div>
-          )}
         </div>
       </div>
 

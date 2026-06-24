@@ -30,11 +30,7 @@ export function MyPageScreen({
   onSessionUpdated,
   onOpenSell,
   onOpenItem,
-  onCancelled,
-  onCompleteStep,
-  autoPilot,
-  autoPilotStep,
-  onCompleteAutopilotStep
+  onCancelled
 }: {
   user: User | null;
   myItems: Item[];
@@ -44,10 +40,6 @@ export function MyPageScreen({
   onOpenSell: () => void;
   onOpenItem: (itemId: number) => void;
   onCancelled: (itemId: number) => Promise<void>;
-  onCompleteStep?: (step: number) => void;
-  autoPilot?: boolean;
-  autoPilotStep?: number;
-  onCompleteAutopilotStep?: (step: number) => void;
 }) {
   const [uploading, setUploading] = useState(false);
   const [profileError, setProfileError] = useState("");
@@ -62,37 +54,6 @@ export function MyPageScreen({
   const [barterLoops, setBarterLoops] = useState<BarterLoopDetail[]>([]);
   const [barterLoading, setBarterLoading] = useState(false);
   const [barterError, setBarterError] = useState("");
-
-  // Autopilot Actions inside My Page
-  useEffect(() => {
-    if (!autoPilot) return;
-
-    if (autoPilotStep === 6) {
-      setActiveTab("barter");
-    } else if (autoPilotStep === 7) {
-      // Auto-approve barter loop #999!
-      const timer = setTimeout(() => {
-        acceptBarter(999);
-      }, 1500);
-      return () => clearTimeout(timer);
-    } else if (autoPilotStep === 8) {
-      // Auto-ship & receive barter loop #999!
-      const timerShip = setTimeout(() => {
-        shipBarter(999);
-      }, 1000);
-      const timerReceive = setTimeout(() => {
-        receiveBarter(999).then(() => {
-          setTimeout(() => {
-            if (onCompleteAutopilotStep) onCompleteAutopilotStep(8);
-          }, 3000); // Wait 3 seconds for judge to read loop completion screen!
-        });
-      }, 3500);
-      return () => {
-        clearTimeout(timerShip);
-        clearTimeout(timerReceive);
-      };
-    }
-  }, [autoPilot, autoPilotStep]);
 
   // Compute active escrow dynamically
   const escrowBalance = (conversations || []).reduce((acc, c) => {
@@ -159,7 +120,6 @@ export function MyPageScreen({
     try {
       await api(`/barter/loops/${loopId}/receive`, { method: "POST" });
       loadBarterLoops();
-      if (onCompleteStep) onCompleteStep(2);
     } catch (err) {
       alert(err instanceof Error ? err.message : "受取報告に失敗しました");
     }
@@ -526,7 +486,7 @@ export function MyPageScreen({
                 <strong style={{ fontSize: "15px" }}>⚠️ マッチングループ確認：一時的にご利用いただけません</strong>
                 <p style={{ margin: 0, color: "#92400e", lineHeight: "1.6" }}>
                   現在データベースとの接続調整中か、有効な物々交換マッチングループ（わらしべ閉路）データを取得できませんでした。<br />
-                  少し時間を置いてから再度「AIわらしべ物々交換」タブをクリックしていただくか、画面上部の<strong>「⚡ デモデータを自動投入」</strong>を実行してダミーデータを初期化してください。
+                  少し時間を置いてから再度「AIわらしべ物々交換」タブをクリックしてみてください。
                 </p>
               </div>
             ) : barterLoops.length === 0 ? (
@@ -713,7 +673,7 @@ export function ReviewComposer({
   counterpartName: string;
 }) {
   const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState("スムーズで大変気持ちの良いお取引ができました。また機会がありましたらよろしくお願いいたします！");
+  const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 

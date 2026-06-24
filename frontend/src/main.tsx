@@ -14,8 +14,6 @@ import {
   LogOut,
   MessageCircle,
   PackagePlus,
-  Store,
-  TrendingUp,
   UserCircle2
 } from "lucide-react";
 
@@ -122,13 +120,6 @@ function App() {
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
 
-  // --- デモツアー ＆ オートパイロット進行ステート ---
-  const [demoTourActive, setDemoTourActive] = useState(false);
-  const [demoStep, setDemoStep] = useState(1);
-  const [autoPilot, setAutoPilot] = useState(false);
-  const [autoPilotStep, setAutoPilotStep] = useState(0);
-  const [autoPilotPrompt, setAutoPilotPrompt] = useState("");
-
   // URLハッシュの変化を検知し、認証ガードを掛けながらルーティング同期
   useEffect(() => {
     function syncRoute() {
@@ -144,105 +135,6 @@ function App() {
     return () => window.removeEventListener("hashchange", syncRoute);
   }, [token]);
 
-  // オートパイロットのステップ進行をトリガーするハンドラ
-  const handleCompleteAutopilotStep = (step: number) => {
-    if (!autoPilot) return;
-    if (step === 2) {
-      setAutoPilotStep(3);
-    } else if (step === 3) {
-      setAutoPilotStep(4);
-    } else if (step === 4) {
-      setAutoPilotStep(5);
-    } else if (step === 8) {
-      setAutoPilotStep(9);
-    } else if (step === 9) {
-      setAutoPilotStep(10);
-    }
-  };
-
-  // フルオート・ガイドツアーディレクター
-  useEffect(() => {
-    if (!autoPilot) return;
-
-    let timer: any;
-    switch (autoPilotStep) {
-      case 1:
-        setAutoPilotPrompt("🚀 [1/10] iPhone 14 Pro 詳細ページへ自動テレポート中...");
-        timer = setTimeout(() => {
-          navigate({ page: "item", itemId: 9901 });
-          // Safe 1.2s mount lag to ensure ItemDetailScreen is fully loaded before entering step 2
-          timer = setTimeout(() => {
-            setAutoPilotStep(2);
-          }, 1200);
-        }, 2200);
-        break;
-      case 2:
-        setAutoPilotPrompt("🔮 [2/10] iPhone 14 Pro を3D空間スキャンし、材質や摩耗率、適正価値を測定中...");
-        // Automatically close the scanner and advance to negotiation setup after 4.5s
-        timer = setTimeout(() => {
-          setAutoPilotStep(3);
-        }, 4500);
-        break;
-      case 3:
-        setAutoPilotPrompt("🤖 [3/10] 3Dスキャンで判定された適正価値を参考に、AI価格交渉室を起動中...");
-        // Automatically open the negotiation modal and advance to the negotiation run after 2.2s
-        timer = setTimeout(() => {
-          setAutoPilotStep(4);
-        }, 2200);
-        break;
-      case 4:
-        setAutoPilotPrompt("💬 [4/10] お互いの意思決定AI同士で値下げ・購入合意を自律交渉中（完了を検知します）...");
-        break;
-      case 5:
-        setAutoPilotPrompt("🔒 [5/10] Stripeエスクロー決済成立を確認。DMs取引ナビへ遷移します...");
-        timer = setTimeout(() => {
-          navigate({ page: "messages" });
-          setSelectedConversationId(999);
-          // Safe 1.2s mount lag to ensure MessagesScreen is fully loaded before entering step 6
-          timer = setTimeout(() => {
-            setAutoPilotStep(6);
-          }, 1200);
-        }, 4500);
-        break;
-      case 6:
-        setAutoPilotPrompt("🔄 [6/10] マイページの「AIわらしべ物々交換」ボードを開きます...");
-        timer = setTimeout(() => {
-          navigate({ page: "mypage" });
-          // Safe 1.2s mount lag to ensure MyPageScreen is fully loaded before entering step 7
-          timer = setTimeout(() => {
-            setAutoPilotStep(7);
-          }, 1200);
-        }, 4000);
-        break;
-      case 7:
-        setAutoPilotPrompt("🤝 [7/10] マッチング成立中の等価循環ループを自動『承認』します...");
-        timer = setTimeout(() => {
-          setAutoPilotStep(8);
-        }, 4500);
-        break;
-      case 8:
-        setAutoPilotPrompt("🚚 [8/10] 3者間での商品配送・受領・売上金の確定を自律処理中（完了を検知します）...");
-        break;
-      case 9:
-        setAutoPilotPrompt("📸 [9/10] 生成AI（DALL-E & シネマグラフ）による写真・動画を生成中（完了を検知します）...");
-        // Teleport/navigate back to iPhone 14 Pro Details to mount ItemDetailScreen and trigger generation
-        navigate({ page: "item", itemId: 9901 });
-        break;
-      case 10:
-        setAutoPilotPrompt("🎉 [10/10] デモツアー完了！ご清聴ありがとうございました！");
-        timer = setTimeout(() => {
-          alert("🎉 デモツアーお疲れ様でした！\nすべての次世代AI機能（3D空間スキャン、AIエージェント交渉、わらしべ物々交換、Stripeエスクロー、DALL-Eシネマグラフ）をご体験いただき、誠にありがとうございました！\nNext Marketの革新的な機能をご清聴いただき、重ねて御礼申し上げます。");
-          setAutoPilot(false);
-          setAutoPilotStep(0);
-          setAutoPilotPrompt("");
-          navigate({ page: "home" });
-        }, 5500);
-        break;
-    }
-
-    return () => clearTimeout(timer);
-  }, [autoPilot, autoPilotStep]);
-
   const selectedItem = route.page === "item" ? items.find((it) => it.id === route.itemId) ?? null : null;
   const selectedConversation = conversations.find((c) => c.id === selectedConversationId) ?? null;
 
@@ -256,7 +148,7 @@ function App() {
     const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
     
     // Auto-logout on 401 Unauthorized (expired or invalid token)
-    if (response.status === 401 && path !== "/auth/login" && path !== "/auth/register" && path !== "/auth/reset-demo") {
+    if (response.status === 401 && path !== "/auth/login" && path !== "/auth/register") {
       logout();
       throw new Error("セッションの有効期限が切れました。もう一度ログインしてください。");
     }
@@ -362,7 +254,9 @@ function App() {
 
   const updateSession = (nextToken: string, nextUser: User) => {
     saveSession(nextToken, nextUser);
-    navigate({ page: "home" });
+    // hashchange を発火させずに URL を更新し、stale closure による auth リダイレクトを防ぐ
+    window.history.replaceState(null, "", "#home");
+    setRoute({ page: "home" });
   };
 
   const logout = () => {
@@ -372,57 +266,8 @@ function App() {
     setRoute({ page: "auth" });
   };
 
-  async function runDemoSeeder() {
-    try {
-      const data = await api<{ status: string; message: string; token?: string; user?: User }>("/demo/seed", { method: "POST" });
-      setNotice(data.message);
-      if (data.token && data.user) {
-        saveSession(data.token, data.user);
-      }
-      await Promise.all([loadItems(), loadConversations(), loadMyItems()]);
-      setAutoPilot(true);
-      setDemoTourActive(false);
-      setDemoStep(1);
-      setAutoPilotStep(1);
-    } catch (err) {
-      alert("デモセットアップに失敗しました: " + (err instanceof Error ? err.message : ""));
-    }
-  }
-
   return (
-    <main className="app-shell" style={{ paddingTop: autoPilot ? "50px" : undefined }}>
-      {/* オートパイロット表示HUD */}
-      {autoPilot && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          background: "linear-gradient(135deg, #6366f1, #4F46E5)",
-          color: "#ffffff",
-          padding: "10px 24px",
-          textAlign: "center",
-          fontWeight: 800,
-          fontSize: "14px",
-          zIndex: 9999,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: "12px",
-          boxShadow: "0 4px 15px rgba(0,0,0,0.25)"
-        }}>
-          <span style={{
-            display: "inline-block",
-            width: "10px",
-            height: "10px",
-            borderRadius: "50%",
-            background: "#ef4444",
-            boxShadow: "0 0 10px #ef4444"
-          }}></span>
-          <span>領🔴 AUTOPILOT TOUR ACTIVE: {autoPilotPrompt}</span>
-        </div>
-      )}
-
+    <main className="app-shell">
       {notice && (
         <div className="system-notice" role="status" aria-live="polite">
           <CheckCircle2 className="system-notice-icon" size={22} aria-hidden="true" />
@@ -506,7 +351,6 @@ function App() {
                 void loadItems(f);
               }}
               onOpenItem={(itemId) => navigate({ page: "item", itemId })}
-              onRunDemo={runDemoSeeder}
             />
           )}
 
@@ -540,14 +384,6 @@ function App() {
                   await loadMessages(conversationId);
                   navigate({ page: "messages" });
                 }}
-                onCompleteStep={(step) => {
-                  if (demoTourActive && demoStep === step) {
-                    setDemoStep(step + 1);
-                  }
-                }}
-                autoPilot={autoPilot}
-                autoPilotStep={autoPilotStep}
-                onCompleteAutopilotStep={handleCompleteAutopilotStep}
               />
             )
           )}
@@ -578,14 +414,6 @@ function App() {
                 await Promise.all([loadItems(itemFilters), loadMyItems()]);
                 setNotice(`出品を取り下げました: #${itemId}`);
               }}
-              onCompleteStep={(step) => {
-                if (demoTourActive && demoStep === step) {
-                  setDemoStep(step + 1);
-                }
-              }}
-              autoPilot={autoPilot}
-              autoPilotStep={autoPilotStep}
-              onCompleteAutopilotStep={handleCompleteAutopilotStep}
             />
           )}
 
@@ -599,20 +427,6 @@ function App() {
 
           {route.page === "help" && <HelpScreen />}
         </>
-      )}
-
-      {demoTourActive && (
-        <DemoTourWidget 
-          step={demoStep} 
-          onClose={() => setDemoTourActive(false)} 
-          onNavigate={(page, id) => {
-            if (page === "item" && id) {
-              navigate({ page: "item", itemId: id });
-            } else {
-              navigate({ page: page as any });
-            }
-          }}
-        />
       )}
     </main>
   );
@@ -654,116 +468,6 @@ function navigate(route: Route) {
         ? `admin/${route.subpage}`
         : route.page;
   window.location.hash = hash;
-}
-
-// --- デモツアー用ガイドウィジェット ---
-
-export function DemoTourWidget({
-  step,
-  onClose,
-  onNavigate
-}: {
-  step: number;
-  onClose: () => void;
-  onNavigate: (page: string, id?: number) => void;
-}) {
-  return (
-    <div style={{
-      position: "fixed",
-      bottom: "80px",
-      right: "24px",
-      background: "rgba(15, 23, 42, 0.95)",
-      backdropFilter: "blur(12px)",
-      border: "2px solid #fbbf24",
-      borderRadius: "16px",
-      padding: "20px",
-      width: "360px",
-      boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 15px rgba(251, 191, 36, 0.3)",
-      color: "#ffffff",
-      zIndex: 2000,
-      display: "flex",
-      flexDirection: "column",
-      gap: "14px",
-      animation: "sparkleGlow 2s infinite alternate ease-in-out"
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #334155", paddingBottom: "10px" }}>
-        <strong style={{ fontSize: "14px", color: "#fbbf24", display: "flex", alignItems: "center", gap: "6px" }}>
-          🤖 Next Market AI体験ツアーガイド
-        </strong>
-        <button type="button" onClick={onClose} style={{ background: "none", border: "none", color: "#94a3b8", fontSize: "16px", cursor: "pointer" }}>✕</button>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        
-        {/* Step 1 */}
-        <div style={{ opacity: step >= 1 ? 1 : 0.4, display: "flex", gap: "10px", alignItems: "start" }}>
-          <span style={{ fontSize: "18px" }}>{step > 1 ? "✅" : "🤖"}</span>
-          <div>
-            <strong style={{ fontSize: "13px", color: step === 1 ? "#fbbf24" : "#ffffff", textDecoration: step > 1 ? "line-through" : "none" }}>
-              1. 大阪商人AIと値引き交渉をしよう！
-            </strong>
-            {step === 1 && (
-              <>
-                <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: "#cbd5e1", lineHeight: "1.4" }}>
-                  デモ投入した商品「iPhone 14 Pro」を開き、「🤖 代理AI交渉」をクリック！予算を設定して交渉シミュレーションを開始してください。
-                </p>
-                <button type="button" onClick={() => onNavigate("item", 9901)} style={{ marginTop: "8px", background: "#fbbf24", color: "#0f172a", border: "none", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
-                  👉 対象のiPhone詳細へジャンプ
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Step 2 */}
-        <div style={{ opacity: step >= 2 ? 1 : 0.4, display: "flex", gap: "10px", alignItems: "start" }}>
-          <span style={{ fontSize: "18px" }}>{step > 2 ? "✅" : "🔄"}</span>
-          <div>
-            <strong style={{ fontSize: "13px", color: step === 2 ? "#fbbf24" : "#ffffff", textDecoration: step > 2 ? "line-through" : "none" }}>
-              2. 3者間わらしべ物々交換を体験しよう！
-            </strong>
-            {step === 2 && (
-              <>
-                <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: "#cbd5e1", lineHeight: "1.4" }}>
-                  「マイページ」の「🔄 AIわらしべ物々交換」タブを開き、すでにマッチング成立したループ提案を「承認」して、発送・受取（エスクロー解除）まで進めてください。
-                </p>
-                <button type="button" onClick={() => onNavigate("mypage")} style={{ marginTop: "8px", background: "#fbbf24", color: "#0f172a", border: "none", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
-                  👉 マイページの物々交換へジャンプ
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Step 3 */}
-        <div style={{ opacity: step >= 3 ? 1 : 0.4, display: "flex", gap: "10px", alignItems: "start" }}>
-          <span style={{ fontSize: "18px" }}>{step > 3 ? "🎉" : "📸"}</span>
-          <div>
-            <strong style={{ fontSize: "13px", color: step === 3 ? "#fbbf24" : "#ffffff", textDecoration: step > 3 ? "line-through" : "none" }}>
-              3. AI使用風景＆シネマ動画を作ろう！
-            </strong>
-            {step === 3 && (
-              <>
-                <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: "#cbd5e1", lineHeight: "1.4" }}>
-                  商品詳細ページ（例: iPhone）で「AI画像を生成」を行い、生成後に「🎬 AI動画を生成・再生」を起動してシネマグラフを再生しましょう！
-                </p>
-                <button type="button" onClick={() => onNavigate("item", 9901)} style={{ marginTop: "8px", background: "#fbbf24", color: "#0f172a", border: "none", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}>
-                  👉 iPhone詳細へジャンプ
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {step > 3 && (
-        <div style={{ background: "rgba(16, 185, 129, 0.2)", border: "1px solid #10b981", borderRadius: "8px", padding: "10px", textAlign: "center", animation: "sparkleGlow 1s infinite alternate" }}>
-          <strong style={{ fontSize: "13px", color: "#34d399", display: "block" }}>🎉 デモツアー完了！</strong>
-          <span style={{ fontSize: "11px", color: "#e2e8f0" }}>すべての次世代AI機能をご体験いただき、誠にありがとうございました！</span>
-        </div>
-      )}
-    </div>
-  );
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
