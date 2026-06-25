@@ -1,4 +1,6 @@
 {
+  "name": "next-market-frontend",
+  "private": true,
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
